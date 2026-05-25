@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>複利計算ツール</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Yu Gothic", "Meiryo", "Hiragino Kaku Gothic ProN", sans-serif; background: #f0f4f0; color: #222; font-size: 14px; line-height: 1.7; }
+
+  /* ヘッダー */
+  header { background: linear-gradient(135deg, #2E7D32, #43A047); color: #fff; padding: 32px 24px 28px; text-align: center; }
+  header h1 { font-size: 40px; margin-bottom: 6px; letter-spacing: 2px; }
+  header p  { font-size: 13px; opacity: .85; }
+
+  /* メインレイアウト */
+  .container { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+
+  /* カード */
+  .card { background: #fff; border-radius: 10px; padding: 22px 24px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+  .card h2 { font-size: 15px; color: #2E7D32; border-left: 4px solid #2E7D32; padding-left: 10px; margin-bottom: 18px; }
+
+  /* 入力フォーム */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+
+  .form-group label { display: block; font-size: 12px; color: #555; margin-bottom: 4px; }
+  .form-group label span { font-weight: bold; color: #2E7D32; font-size: 13px; }
+  .form-group input[type="number"],
+  .form-group select { width: 100%; padding: 9px 12px; border: 1.5px solid #ddd; border-radius: 6px; font-size: 14px; font-family: inherit; transition: border .2s; }
+  .form-group input[type="number"]:focus,
+  .form-group select:focus { outline: none; border-color: #2E7D32; }
+  .form-group input[type="range"] { width: 100%; accent-color: #2E7D32; margin-top: 4px; }
+
+  .calc-btn { display: block; width: 100%; padding: 14px; background: #2E7D32; color: #fff; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; margin-top: 8px; transition: background .2s; letter-spacing: 1px; }
+  .calc-btn:hover { background: #1B5E20; }
+
+  /* 結果エリア */
+  #results { display: none; }
+
+  /* サマリーカード */
+  .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+  @media (max-width: 700px) { .summary-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  .summary-card { background: #fff; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+  .summary-card .label { font-size: 11px; color: #777; margin-bottom: 6px; }
+  .summary-card .value { font-size: 20px; font-weight: bold; color: #2E7D32; }
+  .summary-card .value.large { font-size: 24px; }
+  .summary-card .value.neutral { color: #1976D2; }
+  .summary-card .value.accent { color: #E65100; }
+
+  /* チャートエリア */
+  .chart-row { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; margin-bottom: 18px; }
+  @media (max-width: 700px) { .chart-row { grid-template-columns: 1fr; } }
+  .chart-wrap { position: relative; height: 280px; }
+
+  /* テーブル */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #2E7D32; color: #fff; padding: 8px 12px; text-align: right; white-space: nowrap; }
+  th:first-child { text-align: center; }
+  td { padding: 7px 12px; border-bottom: 1px solid #eee; text-align: right; white-space: nowrap; }
+  td:first-child { text-align: center; font-weight: bold; }
+  tr:nth-child(even) td { background: #f9f9f9; }
+  tr:last-child td { background: #e8f5e9; font-weight: bold; }
+
+  /* 分析セクション */
+  .analysis-row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 600px) { .analysis-row { grid-template-columns: 1fr; } }
+
+  .analysis-item { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #f0f0f0; }
+  .analysis-item:last-child { border-bottom: none; }
+  .analysis-item .val { font-weight: bold; }
+  .analysis-item .val.green { color: #2E7D32; }
+
+  .note-box { background: #fff8e1; border-left: 4px solid #f9a825; padding: 12px 16px; border-radius: 4px; font-size: 13px; }
+  .note-box ol { padding-left: 18px; }
+  .note-box li { margin-bottom: 5px; }
+
+  footer { text-align: center; color: #aaa; font-size: 11px; padding: 20px; }
+
+  /* ドルウサ ガイドキャラ */
+  #dorusa-widget {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    pointer-events: none;
+  }
+  #dorusa-bubble {
+    background: #fff;
+    border: 2px solid #2E7D32;
+    border-radius: 18px 18px 6px 18px;
+    padding: 10px 14px;
+    max-width: 210px;
+    font-size: 13px;
+    line-height: 1.6;
+    box-shadow: 0 4px 16px rgba(0,0,0,.13);
+    color: #333;
+    position: relative;
+    pointer-events: auto;
+    transition: opacity .3s;
+  }
+  #dorusa-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -13px;
+    right: 18px;
+    border: 7px solid transparent;
+    border-top-color: #2E7D32;
+  }
+  #dorusa-img {
+    width: 180px;
+    height: 195px;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: transform .2s;
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,.18));
+    image-rendering: pixelated;
+  }
+  #dorusa-img:hover { transform: scale(1.07) translateY(-4px); }
+  @media (max-width: 480px) {
+    #dorusa-widget { bottom: 12px; right: 12px; }
+    #dorusa-img { width: 120px; height: 130px; }
+    #dorusa-bubble { max-width: 170px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🐰 複利計算ツール 💹</h1>
+  <p>元金・利率・期間を入力して、資産成長をシミュレーション</p>
+</header>
+
+<div class="container">
+
+  <!-- 入力フォーム -->
+  <div class="card">
+    <h2>⚙️ 計算条件を入力</h2>
+    <div class="form-grid">
+
+      <div class="form-group">
+        <label>初期投資額（元金）<span id="lbl-principal">¥1,000,000</span></label>
+        <input type="range" id="r-principal" min="100000" max="10000000" step="100000" value="1000000" oninput="syncRange('principal')">
+        <input type="number" id="principal" min="0" value="1000000" oninput="syncInput('principal')" placeholder="例：1000000">
+      </div>
+
+      <div class="form-group">
+        <label>年利率<span id="lbl-rate">10%</span></label>
+        <input type="range" id="r-rate" min="0.1" max="20" step="0.1" value="10" oninput="syncRange('rate')">
+        <input type="number" id="rate" min="0.01" max="100" step="0.1" value="10" oninput="syncInput('rate')" placeholder="例：10">
+      </div>
+
+      <div class="form-group">
+        <label>投資期間<span id="lbl-years">10年</span></label>
+        <input type="range" id="r-years" min="1" max="40" step="1" value="10" oninput="syncRange('years')">
+        <input type="number" id="years" min="1" max="100" value="10" oninput="syncInput('years')" placeholder="例：10">
+      </div>
+
+      <div class="form-group">
+        <label>毎月の追加投資<span id="lbl-monthly">¥100,000</span></label>
+        <input type="range" id="r-monthly" min="0" max="300000" step="10000" value="100000" oninput="syncRange('monthly')">
+        <input type="number" id="monthly" min="0" value="100000" oninput="syncInput('monthly')" placeholder="例：100000（0で追加なし）">
+      </div>
+
+      <div class="form-group">
+        <label>複利の頻度</label>
+        <select id="frequency">
+          <option value="monthly" selected>月1回（月複利）</option>
+          <option value="annually">年1回（年複利）</option>
+          <option value="daily">日次（日複利）</option>
+        </select>
+      </div>
+
+    </div>
+    <button class="calc-btn" onclick="calculate()">📊 計算する</button>
+  </div>
+
+  <!-- 結果エリア -->
+  <div id="results">
+
+    <!-- サマリー -->
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="label">最終資産額</div>
+        <div class="value large" id="r-final">—</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">支払い総額（元本）</div>
+        <div class="value neutral" id="r-paid">—</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">総利息</div>
+        <div class="value accent" id="r-interest">—</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">利息率（元本比）</div>
+        <div class="value" id="r-ratio">—</div>
+      </div>
+    </div>
+
+    <!-- グラフ -->
+    <div class="chart-row">
+      <div class="card" style="padding:18px 16px">
+        <h2>📈 資産成長推移</h2>
+        <div class="chart-wrap"><canvas id="growthChart"></canvas></div>
+      </div>
+      <div class="card" style="padding:18px 16px">
+        <h2>🥧 最終資産の内訳</h2>
+        <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- 推移テーブル -->
+    <div class="card">
+      <h2>📋 年ごとの成長推移</h2>
+      <div class="table-wrap">
+        <table id="growth-table">
+          <thead>
+            <tr>
+              <th>年</th>
+              <th>元金成長</th>
+              <th>追加投資成長</th>
+              <th>合計額</th>
+              <th>支払い総額</th>
+              <th>利息額</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 分析 -->
+    <div class="analysis-row">
+      <div class="card">
+        <h2>💡 複利効果の分析</h2>
+        <div class="analysis-item"><span>複利最終額</span><span class="val green" id="a-compound">—</span></div>
+        <div class="analysis-item"><span>単利最終額（参考）</span><span class="val" id="a-simple">—</span></div>
+        <div class="analysis-item"><span>複利優位額</span><span class="val green" id="a-diff">—</span></div>
+        <div class="analysis-item"><span>CAGR（年平均成長率）</span><span class="val" id="a-cagr">—</span></div>
+        <p style="margin-top:10px;font-size:12px;color:#666" id="a-comment"></p>
+      </div>
+      <div class="card note-box">
+        <h2 style="color:#b8860b;border-color:#f9a825">📌 注意事項</h2>
+        <ol>
+          <li>利率は一定と仮定しています。</li>
+          <li>税金・手数料は考慮していません。</li>
+          <li>毎月末に追加投資されると想定しています。</li>
+          <li>複利頻度が高いほど利息成長が速くなります（日々 ＞ 月 ＞ 年）。</li>
+          <li>実際の運用結果は変動します。</li>
+        </ol>
+      </div>
+    </div>
+
+  </div><!-- /results -->
+
+</div><!-- /container -->
+
+<footer>このツールはシミュレーション目的です。投資の意思決定には専門家にご相談ください。</footer>
+
+<!-- ドルウサ ガイドキャラ -->
+<div id="dorusa-widget">
+  <div id="dorusa-bubble" id="dorusa-bubble">計算条件を入力して<br>「計算する」を押してね！🐰</div>
+  <canvas id="dorusa-img" width="192" height="208" onclick="toggleBubble()" title="クリックで吹き出し表示／非表示"></canvas>
+</div>
+
+<script>
+// ---- スライダー連動 ----
+function syncRange(key) {
+  const map = { principal: ['r-principal','principal','lbl-principal', v => '¥'+Number(v).toLocaleString()],
+                rate:      ['r-rate','rate','lbl-rate', v => v+'%'],
+                years:     ['r-years','years','lbl-years', v => v+'年'],
+                monthly:   ['r-monthly','monthly','lbl-monthly', v => '¥'+Number(v).toLocaleString()] };
+  const [rid, iid, lid, fmt] = map[key];
+  const val = document.getElementById(rid).value;
+  document.getElementById(iid).value = val;
+  document.getElementById(lid).textContent = ' ' + fmt(val);
+}
+function syncInput(key) {
+  const map = { principal: ['r-principal','principal','lbl-principal', v => '¥'+Number(v).toLocaleString()],
+                rate:      ['r-rate','rate','lbl-rate', v => v+'%'],
+                years:     ['r-years','years','lbl-years', v => v+'年'],
+                monthly:   ['r-monthly','monthly','lbl-monthly', v => '¥'+Number(v).toLocaleString()] };
+  const [rid, iid, lid, fmt] = map[key];
+  const val = document.getElementById(iid).value;
+  document.getElementById(rid).value = val;
+  document.getElementById(lid).textContent = ' ' + fmt(val);
+}
+
+// ---- 複利計算（Pythonロジックと同一） ----
+function calcCompoundInterest(principal, annualRate, years, compoundFrequency, monthlyAddition) {
+  const freqMap = { annually: 1, monthly: 12, daily: 365 };
+  const n = freqMap[compoundFrequency] || 1;
+  const r = annualRate / 100;
+  const yearlyData = [];
+
+  for (let year = 0; year <= years; year++) {
+    // 元金の成長
+    const principalAmount = principal * Math.pow(1 + r / n, n * year);
+
+    // 毎月追加投資の成長（各月が異なる期間複利される）
+    let additionAmount = 0;
+    if (monthlyAddition > 0) {
+      const totalMonths = year * 12;
+      for (let month = 0; month < totalMonths; month++) {
+        const monthsRemaining = totalMonths - month;
+        const yearsRemaining = monthsRemaining / 12;
+        additionAmount += monthlyAddition * Math.pow(1 + r / n, n * yearsRemaining);
+      }
+    }
+
+    const totalAmount  = principalAmount + additionAmount;
+    const totalPaid    = principal + monthlyAddition * 12 * year;
+    const interest     = Math.max(0, totalAmount - totalPaid);
+
+    yearlyData.push({ year, principalGrowth: principalAmount, additionGrowth: additionAmount,
+                      totalAmount, totalPaid, interest });
+  }
+
+  const last = yearlyData[yearlyData.length - 1];
+  const cagr = (Math.pow(last.totalAmount / last.totalPaid, 1 / years) - 1) * 100;
+  // 単利比較（元金のみ・追加投資は単純合算）
+  const simpleFinal = principal * (1 + r * years) + monthlyAddition * 12 * years;
+
+  return { yearlyData, finalAmount: last.totalAmount, totalInterest: last.interest,
+           totalPaid: last.totalPaid, cagr, simpleFinal };
+}
+
+// ---- 通貨フォーマット ----
+const yen = v => '¥' + Math.round(v).toLocaleString();
+
+// ---- チャートインスタンス保持 ----
+let growthChartInst = null;
+let pieChartInst    = null;
+
+// ---- メイン計算 ----
+function calculate() {
+  const principal  = parseFloat(document.getElementById('principal').value)  || 0;
+  const rate       = parseFloat(document.getElementById('rate').value)       || 0;
+  const years      = parseInt(document.getElementById('years').value)        || 0;
+  const monthly    = parseFloat(document.getElementById('monthly').value)    || 0;
+  const frequency  = document.getElementById('frequency').value;
+
+  if (principal <= 0 || rate <= 0 || years <= 0) {
+    alert('元金・年利率・投資期間を正しく入力してください。');
+    return;
+  }
+
+  const res = calcCompoundInterest(principal, rate, years, frequency, monthly);
+
+  // 結果エリア表示
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  // サマリー
+  const ratio = (res.totalInterest / res.totalPaid * 100).toFixed(1);
+  document.getElementById('r-final').textContent    = yen(res.finalAmount);
+  document.getElementById('r-paid').textContent     = yen(res.totalPaid);
+  document.getElementById('r-interest').textContent = yen(res.totalInterest);
+  document.getElementById('r-ratio').textContent    = ratio + '%';
+
+  // 分析
+  const diff = res.finalAmount - res.simpleFinal;
+  document.getElementById('a-compound').textContent = yen(res.finalAmount);
+  document.getElementById('a-simple').textContent   = yen(res.simpleFinal);
+  document.getElementById('a-diff').textContent     = yen(diff);
+  document.getElementById('a-cagr').textContent     = res.cagr.toFixed(2) + '%';
+  document.getElementById('a-comment').textContent  =
+    `複利により単利比で約 ${yen(diff)} の追加利益が得られました。`;
+
+  // ドルウサ反応
+  updateDorusa(parseFloat(ratio), res.finalAmount, years);
+
+  // テーブル
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = '';
+  res.yearlyData.forEach(d => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${d.year}</td><td>${yen(d.principalGrowth)}</td><td>${yen(d.additionGrowth)}</td>
+                    <td>${yen(d.totalAmount)}</td><td>${yen(d.totalPaid)}</td><td>${yen(d.interest)}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // ---- グラフ描画 ----
+  const labels   = res.yearlyData.map(d => d.year + '年');
+  const totals   = res.yearlyData.map(d => d.totalAmount);
+  const paids    = res.yearlyData.map(d => d.totalPaid);
+  const interests = res.yearlyData.map(d => d.interest);
+
+  // 成長推移グラフ
+  if (growthChartInst) growthChartInst.destroy();
+  growthChartInst = new Chart(document.getElementById('growthChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: '最終資産額', data: totals, borderColor: '#2E7D32', backgroundColor: 'rgba(46,125,50,.15)',
+          fill: true, pointRadius: 4, tension: 0.3 },
+        { label: '支払い総額（元本）', data: paids, borderColor: '#1976D2', backgroundColor: 'transparent',
+          borderDash: [6,3], pointRadius: 3, tension: 0.3 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { font: { family: 'Yu Gothic, Meiryo, sans-serif' } } } },
+      scales: {
+        y: { ticks: { callback: v => v >= 1e8 ? (v/1e8).toFixed(1)+'億' : v >= 1e4 ? Math.round(v/1e4)+'万' : v === 0 ? '¥0' : v } }
+      }
+    }
+  });
+
+  // 円グラフ
+  if (pieChartInst) pieChartInst.destroy();
+  pieChartInst = new Chart(document.getElementById('pieChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['支払い総額（元本）', '利息収益'],
+      datasets: [{ data: [res.totalPaid, res.totalInterest],
+                   backgroundColor: ['#1976D2', '#2E7D32'], borderWidth: 2 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { family: 'Yu Gothic, Meiryo, sans-serif' } } },
+        tooltip: { callbacks: { label: ctx => ' ' + yen(ctx.parsed) + ' (' + (ctx.parsed / res.finalAmount * 100).toFixed(1) + '%)' } }
+      }
+    }
+  });
+}
+
+// 初期ラベル更新
+['principal','rate','years','monthly'].forEach(k => syncInput(k));
+
+// ---- ドルウサ スプライトアニメーション ----
+(function() {
+  const FRAME_W = 192, FRAME_H = 208;
+  const ANIMS = {
+    idle:    { row: 0, frames: 6,  fps: 8  },
+    walk:    { row: 1, frames: 8,  fps: 10 },
+    think:   { row: 2, frames: 8,  fps: 8  },
+    bow:     { row: 3, frames: 4,  fps: 8  },
+    excited: { row: 4, frames: 5,  fps: 12 },
+    cheer:   { row: 5, frames: 8,  fps: 12 },
+    bow2:    { row: 6, frames: 6,  fps: 8  },
+    peek:    { row: 7, frames: 6,  fps: 8  },
+    wave:    { row: 8, frames: 6,  fps: 8  },
+  };
+
+  const canvas = document.getElementById('dorusa-img');
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  img.src = 'dorusa_sprite.webp';
+
+  let currentAnim = 'idle';
+  let nextAnim = null;
+  let frame = 0;
+  let lastTime = 0;
+  let rafId = null;
+
+  function playAnim(name, thenIdle) {
+    if (!(name in ANIMS)) return;
+    currentAnim = name;
+    frame = 0;
+    if (thenIdle) nextAnim = 'idle';
+    else nextAnim = null;
+  }
+
+  function draw(ts) {
+    rafId = requestAnimationFrame(draw);
+    const anim = ANIMS[currentAnim];
+    const interval = 1000 / anim.fps;
+    if (ts - lastTime < interval) return;
+    lastTime = ts;
+
+    ctx.clearRect(0, 0, FRAME_W, FRAME_H);
+    ctx.drawImage(img,
+      frame * FRAME_W, anim.row * FRAME_H, FRAME_W, FRAME_H,
+      0, 0, FRAME_W, FRAME_H
+    );
+
+    frame++;
+    if (frame >= anim.frames) {
+      frame = 0;
+      if (nextAnim) {
+        currentAnim = nextAnim;
+        nextAnim = null;
+      }
+    }
+  }
+
+  img.onload = function() {
+    requestAnimationFrame(draw);
+  };
+
+  canvas.addEventListener('mouseenter', function() {
+    playAnim('walk', false);
+  });
+  canvas.addEventListener('mouseleave', function() {
+    playAnim('idle', false);
+  });
+
+  window._dorusaPlayAnim = playAnim;
+})();
+
+function toggleBubble() {
+  const b = document.getElementById('dorusa-bubble');
+  b.style.opacity = b.style.opacity === '0' ? '1' : '0';
+  b.style.pointerEvents = b.style.opacity === '0' ? 'none' : 'auto';
+  if (b.style.opacity !== '0' && window._dorusaPlayAnim) {
+    window._dorusaPlayAnim('wave', true);
+  }
+}
+
+function updateDorusa(ratio, finalAmount, years) {
+  const b = document.getElementById('dorusa-bubble');
+  b.style.opacity = '1';
+  b.style.pointerEvents = 'auto';
+  let msg, animName;
+  if (ratio > 200) {
+    msg = `わあ！元金の${(ratio/100+1).toFixed(1)}倍以上に！✨<br>複利の魔法ってすごいね！`;
+    animName = 'cheer';
+  } else if (ratio > 100) {
+    msg = `${years}年で元金が2倍以上に！🎉<br>長期運用は最強だよ！`;
+    animName = 'excited';
+  } else if (ratio > 50) {
+    msg = `利息が元金の半分以上！<br>コツコツ続ける力は本物だね🐰`;
+    animName = 'bow';
+  } else if (ratio > 20) {
+    msg = `じわじわ育ってるよ！<br>期間を延ばすとさらに加速するよ⬆️`;
+    animName = 'think';
+  } else {
+    msg = `まずは一歩！<br>利率か期間を増やすと<br>複利の力が輝くよ🌱`;
+    animName = 'peek';
+  }
+  b.innerHTML = msg;
+  if (window._dorusaPlayAnim) window._dorusaPlayAnim(animName, true);
+}
+</script>
+</body>
+</html>
