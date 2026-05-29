@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>米国株 決算リサーチ</title>
+<style>
+  :root {
+    --accent: #0071e3;
+    --accent2: #5e5ce6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: linear-gradient(160deg, #deeaff 0%, #f0e8ff 100%);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 12px 40px;
+    gap: 20px;
+  }
+
+  /* ── 検索エリア ── */
+  .search-wrap { width: 100%; max-width: 390px; text-align: center; }
+  h1 { font-size: 22px; font-weight: 800; color: #1c1c1e; margin-bottom: 6px; }
+  .sub-head { font-size: 13px; color: #636366; margin-bottom: 20px; }
+  .search-box {
+    display: flex; gap: 10px;
+    background: #fff;
+    border-radius: 18px;
+    padding: 8px 8px 8px 18px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.10);
+  }
+  .search-box input {
+    flex: 1; border: none; outline: none;
+    font-size: 18px; font-weight: 600; color: #1c1c1e;
+    background: transparent; text-transform: uppercase;
+  }
+  .search-box input::placeholder { color: #c7c7cc; font-weight: 400; text-transform: none; }
+  .search-box button {
+    background: #1c1c1e; color: #fff; border: none;
+    border-radius: 12px; padding: 12px 22px;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+    transition: background .15s;
+  }
+  .search-box button:hover { background: #3a3a3c; }
+  .examples { margin-top: 14px; font-size: 12px; color: #8e8e93; }
+  .examples span {
+    display: inline-block;
+    background: rgba(255,255,255,.75); backdrop-filter: blur(4px);
+    padding: 5px 13px; border-radius: 20px; margin: 3px;
+    cursor: pointer; font-weight: 700; font-size: 12px; color: #1c1c1e;
+    transition: background .15s;
+  }
+  .examples span:hover { background: #fff; }
+
+  /* ── ローディング ── */
+  .loading { display: none; text-align: center; color: #636366; font-size: 13px; }
+  .loading.on { display: block; }
+  .spinner {
+    width: 28px; height: 28px;
+    border: 3px solid #e5e5ea; border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .7s linear infinite;
+    margin: 0 auto 10px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── エラー ── */
+  .error-msg {
+    display: none; width: 100%; max-width: 390px;
+    background: #fff2f2; border-radius: 16px;
+    padding: 14px 18px; color: #c0392b;
+    font-size: 13px; font-weight: 600; text-align: center;
+  }
+  .error-msg.on { display: block; }
+
+  /* ── スマホカード ── */
+  .phone {
+    display: none; width: 390px; max-width: 100%;
+    background: #f2f7ff; border-radius: 44px;
+    box-shadow: 0 24px 80px rgba(0,113,227,.20), 0 4px 16px rgba(0,0,0,.05);
+    overflow: hidden; padding-bottom: 32px;
+  }
+  .phone.on { display: block; }
+
+  .ph-header {
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    padding: 22px 20px 18px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .ph-icon {
+    width: 48px; height: 48px; flex-shrink: 0;
+    background: rgba(255,255,255,.22); border: 1.5px solid rgba(255,255,255,.45);
+    border-radius: 14px; display: flex; align-items: center; justify-content: center;
+    font-size: 24px;
+  }
+  .ph-title { font-size: 17px; font-weight: 700; color: #fff; }
+  .ph-sub { font-size: 12px; color: rgba(255,255,255,.75); margin-top: 2px; }
+  .ph-price { margin-left: auto; text-align: right; }
+  .ph-price-val { font-size: 20px; font-weight: 800; color: #fff; }
+  .ph-price-chg { font-size: 12px; color: rgba(255,255,255,.85); }
+
+  .section {
+    margin: 14px 16px 0;
+    background: #fff; border-radius: 20px;
+    padding: 14px 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05);
+  }
+  .sec-title {
+    font-size: 11px; font-weight: 700; color: var(--accent2);
+    text-transform: uppercase; letter-spacing: .6px; margin-bottom: 10px;
+  }
+  .row {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 9px 0; border-bottom: 1px solid #f2f2f7;
+  }
+  .row:last-child { border-bottom: none; }
+  .row-label { font-size: 13px; color: #636366; font-weight: 500; }
+  .row-right { text-align: right; }
+  .row-val { font-size: 13px; font-weight: 700; color: #1c1c1e; }
+  .no-data { color: #aeaeb2; font-weight: 500; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    border-radius: 8px; padding: 2px 8px;
+    font-size: 11px; font-weight: 700; margin-top: 4px;
+  }
+  .badge.beat { background: rgba(48,209,88,.12); color: #1a7a36; }
+  .badge.miss { background: rgba(255,59,48,.10); color: #c0392b; }
+  .badge.neu  { background: #f2f2f7; color: #636366; }
+  .hint { font-size: 11px; color: #aeaeb2; margin-top: 3px; }
+
+  .footer-date {
+    text-align: center; margin-top: 14px;
+    font-size: 11px; color: #aeaeb2;
+  }
+
+  /* ── 免責 ── */
+  .disclaimer {
+    display: none; font-size: 11px; color: #aeaeb2;
+    text-align: center; max-width: 390px;
+    line-height: 1.6; padding: 0 12px;
+  }
+  .disclaimer.on { display: block; }
+</style>
+</head>
+<body>
+
+<div class="search-wrap">
+  <h1>📊 米国株 決算リサーチ</h1>
+  <p class="sub-head">ティッカーシンボルを入力して最新決算を確認</p>
+  <div class="search-box">
+    <input id="inp" type="text" placeholder="例: AAPL, NVDA, MSFT" autocomplete="off" spellcheck="false">
+    <button onclick="doSearch()">検索</button>
+  </div>
+  <div class="examples">
+    よく使われる銘柄：
+    <span onclick="quick('AAPL')">AAPL</span>
+    <span onclick="quick('NVDA')">NVDA</span>
+    <span onclick="quick('MSFT')">MSFT</span>
+    <span onclick="quick('GOOGL')">GOOGL</span>
+    <span onclick="quick('AMZN')">AMZN</span>
+    <span onclick="quick('META')">META</span>
+    <span onclick="quick('TSLA')">TSLA</span>
+  </div>
+</div>
+
+<div class="loading" id="loading"><div class="spinner"></div>データ取得中...</div>
+<div class="error-msg" id="err"></div>
+<div class="phone" id="card"></div>
+<p class="disclaimer" id="disc">
+  ※ 本情報は参考目的のみです。投資判断はご自身の責任でお願いします。<br>
+  データ提供: Yahoo Finance
+</p>
+
+<script>
+const PROXIES = [
+  u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+  u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+];
+
+async function fetchYF(ticker) {
+  const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}`
+    + `?modules=earnings,financialData,calendarEvents,price&lang=en-US&region=US`;
+  for (const proxy of PROXIES) {
+    try {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 9000);
+      const res = await fetch(proxy(url), { signal: ac.signal });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const json = await res.json();
+      const result = json?.quoteSummary?.result?.[0];
+      if (result) return result;
+    } catch { /* try next proxy */ }
+  }
+  throw new Error('データの取得に失敗しました。しばらく後にお試しください。');
+}
+
+function fmt(v) {
+  if (v == null) return null;
+  const n = Math.abs(v);
+  if (n >= 1e12) return `$${(v/1e12).toFixed(2)}T`;
+  if (n >= 1e9)  return `$${(v/1e9).toFixed(2)}B`;
+  if (n >= 1e6)  return `$${(v/1e6).toFixed(2)}M`;
+  return `$${v.toFixed(2)}`;
+}
+
+function surpriseRow(label, actual, estimate, isMoney = true) {
+  const val = isMoney ? fmt(actual) : (actual != null ? `$${actual.toFixed(2)}` : null);
+  const est = isMoney ? fmt(estimate) : (estimate != null ? `$${estimate.toFixed(2)}` : null);
+
+  if (val == null) {
+    return `<div class="row"><span class="row-label">${label}</span><span class="row-val no-data">―</span></div>`;
+  }
+  let badge = '', hint = '';
+  if (est != null && actual != null && estimate != null) {
+    const diff = (actual - estimate) / Math.abs(estimate);
+    const pct = (diff * 100).toFixed(1);
+    const sign = diff >= 0 ? '+' : '';
+    const cls = diff >= 0 ? 'beat' : 'miss';
+    const lbl = diff >= 0 ? '予想超え ✅' : '予想下回る ❌';
+    badge = `<div class="badge ${cls}">${sign}${pct}% ${lbl}</div>`;
+    hint  = `<div class="hint">予想: ${est}</div>`;
+  }
+  return `<div class="row">
+    <span class="row-label">${label}</span>
+    <div class="row-right">
+      <div class="row-val">${val}</div>
+      ${badge}${hint}
+    </div>
+  </div>`;
+}
+
+function render(ticker, r) {
+  const pr   = r.price || {};
+  const fin  = r.financialData || {};
+  const earn = r.earnings || {};
+  const cal  = r.calendarEvents || {};
+
+  const name      = pr.longName || pr.shortName || ticker;
+  const curPrice  = pr.regularMarketPrice?.raw;
+  const chgPct    = pr.regularMarketChangePercent?.raw;
+
+  const quarterly  = earn.earningsChart?.quarterly || [];
+  const latestQ    = quarterly[quarterly.length - 1] || {};
+  const epsActual  = latestQ.actual?.raw;
+  const epsEst     = latestQ.estimate?.raw;
+  const qLabel     = latestQ.date || '';
+
+  const revActual  = fin.totalRevenue?.raw;
+  const opMargin   = fin.operatingMargins?.raw;
+  const fcf        = fin.freeCashflow?.raw;
+  const revGrowth  = fin.revenueGrowth?.raw;
+  const nextDate   = cal.earnings?.earningsDate?.[0]?.fmt || null;
+
+  // ヘッダー
+  const chgStr = chgPct != null
+    ? `<div class="ph-price-chg">${chgPct >= 0 ? '+' : ''}${(chgPct*100).toFixed(2)}%</div>` : '';
+  const priceBlock = curPrice != null
+    ? `<div class="ph-price"><div class="ph-price-val">$${curPrice.toFixed(2)}</div>${chgStr}</div>` : '';
+
+  let html = `
+  <div class="ph-header">
+    <div class="ph-icon">📊</div>
+    <div>
+      <div class="ph-title">${name}</div>
+      <div class="ph-sub">${ticker}${qLabel ? ' · ' + qLabel + ' 決算' : ''}</div>
+    </div>
+    ${priceBlock}
+  </div>`;
+
+  // 決算サプライズ
+  html += `<div class="section">
+    <div class="sec-title">⚡ 決算サプライズ</div>
+    ${surpriseRow('1株あたり利益（EPS）', epsActual, epsEst, false)}
+    ${surpriseRow('売上高', revActual, null)}
+  </div>`;
+
+  // 経営の健全性
+  let opRow = `<div class="row"><span class="row-label">営業利益率</span><span class="row-val no-data">―</span></div>`;
+  if (opMargin != null) {
+    const pct = (opMargin * 100).toFixed(1);
+    const em  = opMargin >= .2 ? '🟢' : opMargin >= .1 ? '🟡' : '🔴';
+    const col = opMargin >= .2 ? '#30d158' : opMargin >= .1 ? '#ff9f0a' : '#ff3b30';
+    opRow = `<div class="row"><span class="row-label">営業利益率</span>
+      <span class="row-val" style="color:${col}">${em} ${pct}%</span></div>`;
+  }
+  let fcfRow = `<div class="row"><span class="row-label">フリーキャッシュフロー</span><span class="row-val no-data">―</span></div>`;
+  if (fcf != null) {
+    const em  = fcf >= 0 ? '🟢' : '🔴';
+    const col = fcf >= 0 ? '#30d158' : '#ff3b30';
+    fcfRow = `<div class="row"><span class="row-label">フリーキャッシュフロー</span>
+      <span class="row-val" style="color:${col}">${em} ${fmt(fcf)}</span></div>`;
+  }
+  html += `<div class="section">
+    <div class="sec-title">🏥 経営の健全性</div>
+    ${opRow}${fcfRow}
+  </div>`;
+
+  // 次回の案内
+  let nextRow = `<div class="row"><span class="row-label">次回決算予定日</span><span class="row-val">${nextDate || '―'}</span></div>`;
+  let growthRow = '';
+  if (revGrowth != null) {
+    const pct  = (revGrowth * 100).toFixed(1);
+    const sign = revGrowth >= 0 ? '+' : '';
+    const cls  = revGrowth >= 0 ? 'beat' : 'miss';
+    const col  = revGrowth >= 0 ? '#30d158' : '#ff3b30';
+    growthRow = `<div class="row"><span class="row-label">売上成長率（前年比）</span>
+      <span class="row-val" style="color:${col}">${sign}${pct}%</span></div>`;
+  }
+  html += `<div class="section">
+    <div class="sec-title">📅 次回の案内</div>
+    ${nextRow}${growthRow}
+  </div>`;
+
+  html += `<div class="footer-date">📅 情報取得日: ${new Date().toLocaleDateString('ja-JP')}</div>`;
+
+  document.getElementById('card').innerHTML = html;
+  document.getElementById('card').classList.add('on');
+  document.getElementById('disc').classList.add('on');
+}
+
+function setLoading(on) {
+  document.getElementById('loading').classList.toggle('on', on);
+}
+function setError(msg) {
+  const el = document.getElementById('err');
+  el.textContent = msg;
+  el.classList.toggle('on', !!msg);
+}
+
+async function doSearch() {
+  const ticker = document.getElementById('inp').value.trim().toUpperCase();
+  if (!ticker) return;
+
+  setLoading(true);
+  setError('');
+  document.getElementById('card').classList.remove('on');
+  document.getElementById('disc').classList.remove('on');
+
+  try {
+    const data = await fetchYF(ticker);
+    render(ticker, data);
+  } catch (e) {
+    setError(e.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function quick(t) {
+  document.getElementById('inp').value = t;
+  doSearch();
+}
+
+document.getElementById('inp').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doSearch();
+});
+</script>
+</body>
+</html>
