@@ -204,24 +204,31 @@ def fetch_data(ticker_symbol: str) -> dict:
         if v is not None:
             data["op_margin"] = v * 100
 
-    # ── EPS（earnings_dates から最新の報告済み行を取得） ───────────
+    # ── EPS（quarterly_financials から取得 → クラウドでもブロックされない） ──
     try:
-        ed = tk.earnings_dates
-        if ed is not None and not ed.empty:
-            # Reported EPSが入っている行だけ = 報告済み
-            reported = ed.dropna(subset=["Reported EPS"])
-            if not reported.empty:
-                latest = reported.iloc[0]
-                data["eps_actual"]   = safe_float(latest.get("Reported EPS"))
-                data["eps_estimate"] = safe_float(latest.get("EPS Estimate"))
+        if qf is not None and not qf.empty:
+            for eps_key in ("Diluted EPS", "Basic EPS"):
+                if eps_key in qf.index:
+                    data["eps_actual"] = safe_float(qf.loc[eps_key].iloc[0])
+                    # 前年同期EPS（4四半期前）をアナリスト予想の代替として使用
+                    if len(qf.columns) >= 5:
+                        data["eps_estimate"] = safe_float(qf.loc[eps_key].iloc[4])
+                    break
     except Exception:
         pass
 
-    # EPS フォールバック
+    # フォールバック: earnings_dates
     if data["eps_actual"] is None:
-        data["eps_actual"] = safe_float(info.get("trailingEps"))
-    if data["eps_estimate"] is None:
-        data["eps_estimate"] = safe_float(info.get("forwardEps"))
+        try:
+            ed = tk.earnings_dates
+            if ed is not None and not ed.empty:
+                reported = ed.dropna(subset=["Reported EPS"])
+                if not reported.empty:
+                    latest = reported.iloc[0]
+                    data["eps_actual"]   = safe_float(latest.get("Reported EPS"))
+                    data["eps_estimate"] = safe_float(latest.get("EPS Estimate"))
+        except Exception:
+            pass
 
     if data["eps_actual"] is not None and data["eps_estimate"] is not None:
         base = abs(data["eps_estimate"])
@@ -245,18 +252,28 @@ def fetch_data(ticker_symbol: str) -> dict:
     if data["fcf"] is None:
         data["fcf"] = safe_float(info.get("freeCashflow"))
 
-    # ── 次回決算日 ─────────────────────────────────────────────────
-    try:
-        # earnings_dates の未報告行（Reported EPS が NaN）の直近が次回
-        ed = tk.earnings_dates
-        if ed is not None and not ed.empty:
-            future = ed[ed["Reported EPS"].isna()]
-            if not future.empty:
-                nd = future.index[0]
-                data["next_date"] = str(nd)[:10]
-    except Exception:
-        pass
+    # ── 次回決算日・予想（FMP API） ────────────────────────────────
+    import os, requests as _req
+    from datetime import date as _date, timedelta as _td
+    fmp_key = os.environ.get("FMP_API_KEY", "")
+    if fmp_key:
+        try:
+            today = _date.today().isoformat()
+            future = (_date.today() + _td(days=180)).isoformat()
+            url = (f"https://financialmodelingprep.com/api/v3/earning_calendar"
+                   f"?from={today}&to={future}&symbol={ticker_symbol}&apikey={fmp_key}")
+            resp = _req.get(url, timeout=5)
+            if resp.status_code == 200:
+                items = resp.json()
+                if items:
+                    item = items[0]
+                    data["next_date"]    = item.get("date")
+                    data["next_eps_est"] = safe_float(item.get("epsEstimated"))
+                    data["next_rev_est"] = safe_float(item.get("revenueEstimated"))
+        except Exception:
+            pass
 
+    # FMPキーなし or 失敗時: yfinance calendar フォールバック
     if data["next_date"] is None:
         try:
             cal = tk.calendar
@@ -267,21 +284,6 @@ def fetch_data(ticker_symbol: str) -> dict:
                 data["next_date"] = str(nd)[:10] if nd else None
         except Exception:
             pass
-
-    # ── 次回予想（revenue_estimate / earnings_estimate の 0q） ──────
-    try:
-        re = tk.revenue_estimate
-        if re is not None and not re.empty and "0q" in re.index:
-            data["next_rev_est"] = safe_float(re.loc["0q", "avg"])
-    except Exception:
-        pass
-
-    try:
-        ee = tk.earnings_estimate
-        if ee is not None and not ee.empty and "0q" in ee.index:
-            data["next_eps_est"] = safe_float(ee.loc["0q", "avg"])
-    except Exception:
-        pass
 
     # フォールバック
     if data["next_eps_est"] is None:
