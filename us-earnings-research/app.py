@@ -255,27 +255,19 @@ def debug():
     tk = yf.Ticker(ticker)
     out = {}
     try:
-        ed = tk.earnings_dates
-        out["earnings_dates_columns"] = list(ed.columns) if ed is not None else None
-        out["earnings_dates_head"] = ed.head(4).to_dict() if ed is not None and not ed.empty else None
+        qf = tk.quarterly_financials
+        out["qf_index"] = list(qf.index) if qf is not None else None
+        out["qf_columns"] = [str(c) for c in qf.columns] if qf is not None else None
+        for key in ("Diluted EPS", "Basic EPS", "Total Revenue", "Net Income"):
+            if qf is not None and key in qf.index:
+                out[key] = [str(v) for v in qf.loc[key].tolist()]
     except Exception as e:
-        out["earnings_dates_error"] = str(e)
+        out["qf_error"] = str(e)
     try:
-        re = tk.revenue_estimate
-        out["revenue_estimate"] = re.to_dict() if re is not None and not re.empty else None
+        cal = tk.calendar
+        out["calendar"] = str(cal)
     except Exception as e:
-        out["revenue_estimate_error"] = str(e)
-    try:
-        ee = tk.earnings_estimate
-        out["earnings_estimate"] = ee.to_dict() if ee is not None and not ee.empty else None
-    except Exception as e:
-        out["earnings_estimate_error"] = str(e)
-    try:
-        info = tk.info or {}
-        out["trailingEps"] = info.get("trailingEps")
-        out["forwardEps"] = info.get("forwardEps")
-    except Exception as e:
-        out["info_error"] = str(e)
+        out["calendar_error"] = str(e)
     return f"<pre>{json.dumps(out, indent=2, default=str)}</pre>"
 
 
