@@ -144,18 +144,21 @@ def fetch_data(ticker_symbol: str) -> dict:
         "ticker": ticker_symbol,
         "company": info.get("longName") or info.get("shortName") or ticker_symbol,
         "rev_actual": None,
-        "rev_year_ago": None,     # 前年同期の売上高（YoY比較用）
-        "rev_yoy_pct": None,      # 売上高の前年同月比 %
+        "rev_year_ago": None,
+        "rev_yoy_pct": None,
         "eps_actual": None,
-        "eps_estimate": None,
+        "eps_year_ago": None,     # 前年同期EPS（比較用）
+        "eps_yoy_pct": None,      # EPS前年同期比 %
+        "eps_estimate": None,     # アナリスト予想EPS（FMP取得時のみ）
         "eps_surprise_pct": None,
         "op_margin": None,
-        "op_margin_yoy": None,    # 営業利益率の前年同月比（%ポイント差）
+        "op_margin_yoy": None,
         "fcf": None,
         "next_date": None,
         "next_rev_est": None,
         "next_eps_est": None,
         "quarter": None,
+        "report_date": None,      # 決算発表日
     }
 
     # ── 四半期財務データ（実績 + 前年同月比） ──────────────────────
@@ -189,10 +192,11 @@ def fetch_data(ticker_symbol: str) -> dict:
                     (data["rev_actual"] - data["rev_year_ago"]) / abs(data["rev_year_ago"]) * 100
                 )
 
-            # 四半期ラベル
+            # 四半期ラベル・決算発表日
             try:
                 col = qf.columns[0]
                 data["quarter"] = col.strftime("%Y-Q") + str((col.month - 1) // 3 + 1)
+                data["report_date"] = col.strftime("%Y-%m-%d")
             except Exception:
                 pass
     except Exception:
@@ -210,14 +214,14 @@ def fetch_data(ticker_symbol: str) -> dict:
             for eps_key in ("Diluted EPS", "Basic EPS"):
                 if eps_key in qf.index:
                     data["eps_actual"] = safe_float(qf.loc[eps_key].iloc[0])
-                    # 前年同期EPS（4四半期前）をアナリスト予想の代替として使用
+                    # 前年同期EPS（4四半期前 = 同じ季節）
                     if len(qf.columns) >= 5:
-                        data["eps_estimate"] = safe_float(qf.loc[eps_key].iloc[4])
+                        data["eps_year_ago"] = safe_float(qf.loc[eps_key].iloc[4])
                     break
     except Exception:
         pass
 
-    # フォールバック: earnings_dates
+    # フォールバック: earnings_dates（クラウドでは通常ブロックされるが念のため）
     if data["eps_actual"] is None:
         try:
             ed = tk.earnings_dates
@@ -230,12 +234,15 @@ def fetch_data(ticker_symbol: str) -> dict:
         except Exception:
             pass
 
+    # EPS 前年同期比 %
+    if data["eps_actual"] is not None and data["eps_year_ago"] is not None and data["eps_year_ago"] != 0:
+        data["eps_yoy_pct"] = (data["eps_actual"] - data["eps_year_ago"]) / abs(data["eps_year_ago"]) * 100
+
+    # アナリスト予想 vs 実績のサプライズ（FMP取得時のみ eps_estimate が入る）
     if data["eps_actual"] is not None and data["eps_estimate"] is not None:
         base = abs(data["eps_estimate"])
         if base > 0:
-            data["eps_surprise_pct"] = (
-                (data["eps_actual"] - data["eps_estimate"]) / base * 100
-            )
+            data["eps_surprise_pct"] = (data["eps_actual"] - data["eps_estimate"]) / base * 100
 
     # ── FCF ────────────────────────────────────────────────────────
     try:
@@ -569,10 +576,9 @@ def badge_html(pct):
 
 
 def build_html(d: dict) -> str:
-    from datetime import date
-
-    today = date.today().isoformat()
-    date_badge = f'<span>📅 発表日: {today}</span>'
+    # 発表日: report_date があればそれを使い、なければ今日の日付
+    report_dt = d.get("report_date") or __import__("datetime").date.today().isoformat()
+    date_badge = f'<span>📅 決算期末: {report_dt}</span>'
     quarter_badge = f'<span>期: {d["quarter"]}</span>' if d["quarter"] else ""
 
     # 売上高（前年同期 → 実績 + YoY%）
@@ -587,27 +593,32 @@ def build_html(d: dict) -> str:
 
     rev_bdg_html = badge_html(d["rev_yoy_pct"])
 
-    # 総合コメントバナー
-    sc = surprise_comment(d["rev_yoy_pct"], d["eps_surprise_pct"])
+    # 総合コメントバナー（EPS YoY を使用、アナリスト予想がある場合はサプライズを優先）
+    eps_pct_for_comment = d.get("eps_surprise_pct") if d.get("eps_surprise_pct") is not None else d.get("eps_yoy_pct")
+    sc = surprise_comment(d["rev_yoy_pct"], eps_pct_for_comment)
     summary_banner_html = (
         f'<div class="summary-banner" style="background:{sc["bg"]};color:{sc["color"]}">'
         f'<span style="font-size:16px">{sc["emoji"]}</span>{sc["text"]}</div>'
     )
 
-    # EPS
+    # EPS表示：アナリスト予想があれば「予想→実績」、なければ「前年同期→実績」で表示
     if d["eps_estimate"] is not None:
         eps_est_html = val_group(f'${d["eps_estimate"]:.2f}', "予想")
         eps_arr_html = '<span class="arrow">→</span>'
+        eps_bdg_html = badge_html(d["eps_surprise_pct"])
+    elif d.get("eps_year_ago") is not None:
+        eps_est_html = val_group(f'${d["eps_year_ago"]:.2f}', "前年同期")
+        eps_arr_html = '<span class="arrow">→</span>'
+        eps_bdg_html = badge_html(d.get("eps_yoy_pct"))
     else:
         eps_est_html = ""
         eps_arr_html = ""
+        eps_bdg_html = badge_html(None)
 
     if d["eps_actual"] is not None:
         eps_act_html = val_group(f'${d["eps_actual"]:.2f}', "実績")
     else:
         eps_act_html = val_group('<span class="na">―</span>', "実績")
-
-    eps_bdg_html = badge_html(d["eps_surprise_pct"])
 
     def make_judge_html(judge):
         if judge is None:
