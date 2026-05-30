@@ -4,6 +4,8 @@
 ブラウザで http://localhost:5000 を開く
 """
 
+import json
+import yfinance as yf
 from flask import Flask, request, render_template_string
 from earnings_ui import fetch_data, build_html
 
@@ -245,6 +247,36 @@ def result():
             TOP_HTML, query=ticker,
             error=f"データ取得中にエラーが発生しました: {e}"
         )
+
+
+@app.route("/debug")
+def debug():
+    ticker = request.args.get("ticker", "NVDA").strip().upper()
+    tk = yf.Ticker(ticker)
+    out = {}
+    try:
+        ed = tk.earnings_dates
+        out["earnings_dates_columns"] = list(ed.columns) if ed is not None else None
+        out["earnings_dates_head"] = ed.head(4).to_dict() if ed is not None and not ed.empty else None
+    except Exception as e:
+        out["earnings_dates_error"] = str(e)
+    try:
+        re = tk.revenue_estimate
+        out["revenue_estimate"] = re.to_dict() if re is not None and not re.empty else None
+    except Exception as e:
+        out["revenue_estimate_error"] = str(e)
+    try:
+        ee = tk.earnings_estimate
+        out["earnings_estimate"] = ee.to_dict() if ee is not None and not ee.empty else None
+    except Exception as e:
+        out["earnings_estimate_error"] = str(e)
+    try:
+        info = tk.info or {}
+        out["trailingEps"] = info.get("trailingEps")
+        out["forwardEps"] = info.get("forwardEps")
+    except Exception as e:
+        out["info_error"] = str(e)
+    return f"<pre>{json.dumps(out, indent=2, default=str)}</pre>"
 
 
 if __name__ == "__main__":
