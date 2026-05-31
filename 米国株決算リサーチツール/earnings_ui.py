@@ -132,6 +132,29 @@ def judge_fcf(val):
 
 # ─── データ取得 ──────────────────────────────────────────────────
 
+def _fetch_next_earnings_fmp(ticker_symbol: str):
+    """FMP API から次回決算日を取得。環境変数 FMP_API_KEY が必要。"""
+    api_key = os.environ.get("FMP_API_KEY")
+    if not api_key:
+        return None
+    try:
+        import urllib.request
+        import json
+        from datetime import date as _date
+        url = (
+            "https://financialmodelingprep.com/api/v3/earning_calendar"
+            f"?symbol={ticker_symbol}&apikey={api_key}"
+        )
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            results = json.loads(resp.read())
+        today = _date.today().isoformat()
+        future = [r for r in results if r.get("date", "") >= today]
+        return future[0]["date"] if future else None
+    except Exception:
+        return None
+
+
 def fetch_data(ticker_symbol: str) -> dict:
     tk = yf.Ticker(ticker_symbol)
     info = {}
@@ -158,6 +181,7 @@ def fetch_data(ticker_symbol: str) -> dict:
         "next_rev_est": None,
         "next_eps_est": None,
         "quarter": None,
+        "quarter_date": None,
     }
 
     # ── 四半期財務データ（実績 + 前年同月比） ──────────────────────
@@ -191,10 +215,11 @@ def fetch_data(ticker_symbol: str) -> dict:
                     (data["rev_actual"] - data["rev_year_ago"]) / abs(data["rev_year_ago"]) * 100
                 )
 
-            # 四半期ラベル
+            # 四半期ラベル・期末日
             try:
                 col = qf.columns[0]
                 data["quarter"] = col.strftime("%Y-Q") + str((col.month - 1) // 3 + 1)
+                data["quarter_date"] = col.strftime("%Y-%m-%d")
             except Exception:
                 pass
     except Exception:
@@ -259,17 +284,25 @@ def fetch_data(ticker_symbol: str) -> dict:
         data["fcf"] = safe_float(info.get("freeCashflow"))
 
     # ── 次回決算日 ─────────────────────────────────────────────────
+    from datetime import date as _date
+    _today = _date.today().isoformat()
+
     try:
-        # earnings_dates の未報告行（Reported EPS が NaN）の直近が次回
         ed = tk.earnings_dates
         if ed is not None and not ed.empty:
             future = ed[ed["Reported EPS"].isna()]
             if not future.empty:
-                nd = future.index[0]
-                data["next_date"] = str(nd)[:10]
+                nd = str(future.index[0])[:10]
+                if nd >= _today:
+                    data["next_date"] = nd
     except Exception:
         pass
 
+    # FMP API（FMP_API_KEY 環境変数が設定されている場合）
+    if data["next_date"] is None:
+        data["next_date"] = _fetch_next_earnings_fmp(ticker_symbol)
+
+    # yfinance calendar フォールバック（過去日は無視）
     if data["next_date"] is None:
         try:
             cal = tk.calendar
@@ -277,7 +310,10 @@ def fetch_data(ticker_symbol: str) -> dict:
                 nd = cal.get("Earnings Date") or cal.get("earningsDate")
                 if isinstance(nd, list) and nd:
                     nd = nd[0]
-                data["next_date"] = str(nd)[:10] if nd else None
+                if nd:
+                    nd_str = str(nd)[:10]
+                    if nd_str >= _today:
+                        data["next_date"] = nd_str
         except Exception:
             pass
 
@@ -582,8 +618,8 @@ def badge_html(pct):
 def build_html(d: dict) -> str:
     from datetime import date
 
-    today = date.today().isoformat()
-    date_badge = f'<span>📅 発表日: {today}</span>'
+    qdate = d.get("quarter_date") or date.today().isoformat()
+    date_badge = f'<span>📅 期末: {qdate}</span>'
     quarter_badge = f'<span>期: {d["quarter"]}</span>' if d["quarter"] else ""
 
     # 売上高（前年同期 → 実績 + YoY%）
