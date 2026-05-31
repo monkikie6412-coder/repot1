@@ -213,6 +213,25 @@ RESULT_WRAPPER = """<!DOCTYPE html>
 """
 
 
+@app.route("/api/result")
+def api_result():
+    from flask import jsonify
+    ticker = request.args.get("ticker", "").strip().upper()
+    if not ticker:
+        resp = jsonify({"error": "ticker required"})
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        return resp, 400
+    try:
+        data = fetch_data(ticker)
+        resp = jsonify(data)
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        return resp
+    except Exception as e:
+        resp = jsonify({"error": str(e)})
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        return resp, 500
+
+
 @app.route("/")
 def index():
     return render_template_string(TOP_HTML, query="", error=None)

@@ -175,27 +175,25 @@
 </p>
 
 <script>
-const PROXIES = [
-  u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-  u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-];
+const API_BASE = 'https://us-earnings-research.onrender.com';
 
-async function fetchYF(ticker) {
-  const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}`
-    + `?modules=earnings,financialData,calendarEvents,price&lang=en-US&region=US`;
-  for (const proxy of PROXIES) {
-    try {
-      const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 9000);
-      const res = await fetch(proxy(url), { signal: ac.signal });
-      clearTimeout(timer);
-      if (!res.ok) continue;
-      const json = await res.json();
-      const result = json?.quoteSummary?.result?.[0];
-      if (result) return result;
-    } catch { /* try next proxy */ }
+async function fetchAPI(ticker) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 58000);
+  try {
+    const res = await fetch(`${API_BASE}/api/result?ticker=${encodeURIComponent(ticker)}`, {
+      signal: ac.signal
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error('データの取得に失敗しました。しばらく後にお試しください。');
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+    return d;
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') throw new Error('タイムアウトしました。再度お試しください。');
+    throw e;
   }
-  throw new Error('データの取得に失敗しました。しばらく後にお試しください。');
 }
 
 function fmt(v) {
@@ -207,92 +205,60 @@ function fmt(v) {
   return `$${v.toFixed(2)}`;
 }
 
-function surpriseRow(label, actual, estimate, isMoney = true) {
-  const val = isMoney ? fmt(actual) : (actual != null ? `$${actual.toFixed(2)}` : null);
-  const est = isMoney ? fmt(estimate) : (estimate != null ? `$${estimate.toFixed(2)}` : null);
-
-  if (val == null) {
+function yoyRow(label, actual, yearAgo, yoyPct, isMoney = true) {
+  const valFmt = v => v == null ? null : isMoney ? fmt(v) : `$${v.toFixed(2)}`;
+  const valStr = valFmt(actual);
+  if (valStr == null) {
     return `<div class="row"><span class="row-label">${label}</span><span class="row-val no-data">―</span></div>`;
   }
   let badge = '', hint = '';
-  if (est != null && actual != null && estimate != null) {
-    const diff = (actual - estimate) / Math.abs(estimate);
-    const pct = (diff * 100).toFixed(1);
-    const sign = diff >= 0 ? '+' : '';
-    const cls = diff >= 0 ? 'beat' : 'miss';
-    const lbl = diff >= 0 ? '予想超え ✅' : '予想下回る ❌';
-    badge = `<div class="badge ${cls}">${sign}${pct}% ${lbl}</div>`;
-    hint  = `<div class="hint">予想: ${est}</div>`;
+  if (yoyPct != null) {
+    const sign = yoyPct >= 0 ? '+' : '';
+    const cls  = yoyPct >= 0 ? 'beat' : 'miss';
+    badge = `<div class="badge ${cls}">${sign}${yoyPct.toFixed(1)}% 前年比</div>`;
+  }
+  if (yearAgo != null) {
+    hint = `<div class="hint">前年同期: ${valFmt(yearAgo)}</div>`;
   }
   return `<div class="row">
     <span class="row-label">${label}</span>
-    <div class="row-right">
-      <div class="row-val">${val}</div>
-      ${badge}${hint}
-    </div>
+    <div class="row-right"><div class="row-val">${valStr}</div>${badge}${hint}</div>
   </div>`;
 }
 
-function render(ticker, r) {
-  const pr   = r.price || {};
-  const fin  = r.financialData || {};
-  const earn = r.earnings || {};
-  const cal  = r.calendarEvents || {};
-
-  const name      = pr.longName || pr.shortName || ticker;
-  const curPrice  = pr.regularMarketPrice?.raw;
-  const chgPct    = pr.regularMarketChangePercent?.raw;
-
-  const quarterly  = earn.earningsChart?.quarterly || [];
-  const latestQ    = quarterly[quarterly.length - 1] || {};
-  const epsActual  = latestQ.actual?.raw;
-  const epsEst     = latestQ.estimate?.raw;
-  const qLabel     = latestQ.date || '';
-
-  const revActual  = fin.totalRevenue?.raw;
-  const opMargin   = fin.operatingMargins?.raw;
-  const fcf        = fin.freeCashflow?.raw;
-  const revGrowth  = fin.revenueGrowth?.raw;
-  const nextDate   = cal.earnings?.earningsDate?.[0]?.fmt || null;
-
-  // ヘッダー
-  const chgStr = chgPct != null
-    ? `<div class="ph-price-chg">${chgPct >= 0 ? '+' : ''}${(chgPct*100).toFixed(2)}%</div>` : '';
-  const priceBlock = curPrice != null
-    ? `<div class="ph-price"><div class="ph-price-val">$${curPrice.toFixed(2)}</div>${chgStr}</div>` : '';
+function render(ticker, d) {
+  const qLabel = d.quarter || '';
 
   let html = `
   <div class="ph-header">
     <div class="ph-icon">📊</div>
     <div>
-      <div class="ph-title">${name}</div>
+      <div class="ph-title">${d.company || ticker}</div>
       <div class="ph-sub">${ticker}${qLabel ? ' · ' + qLabel + ' 決算' : ''}</div>
     </div>
-    ${priceBlock}
   </div>`;
 
   // 決算サプライズ
   html += `<div class="section">
     <div class="sec-title">⚡ 決算サプライズ</div>
-    ${surpriseRow('1株あたり利益（EPS）', epsActual, epsEst, false)}
-    ${surpriseRow('売上高', revActual, null)}
+    ${yoyRow('売上高', d.rev_actual, d.rev_year_ago, d.rev_yoy_pct, true)}
+    ${yoyRow('1株あたり利益（EPS）', d.eps_actual, d.eps_year_ago, d.eps_yoy_pct, false)}
   </div>`;
 
   // 経営の健全性
   let opRow = `<div class="row"><span class="row-label">営業利益率</span><span class="row-val no-data">―</span></div>`;
-  if (opMargin != null) {
-    const pct = (opMargin * 100).toFixed(1);
-    const em  = opMargin >= .2 ? '🟢' : opMargin >= .1 ? '🟡' : '🔴';
-    const col = opMargin >= .2 ? '#30d158' : opMargin >= .1 ? '#ff9f0a' : '#ff3b30';
+  if (d.op_margin != null) {
+    const em  = d.op_margin >= 20 ? '🟢' : d.op_margin >= 10 ? '🟡' : '🔴';
+    const col = d.op_margin >= 20 ? '#30d158' : d.op_margin >= 10 ? '#ff9f0a' : '#ff3b30';
     opRow = `<div class="row"><span class="row-label">営業利益率</span>
-      <span class="row-val" style="color:${col}">${em} ${pct}%</span></div>`;
+      <span class="row-val" style="color:${col}">${em} ${d.op_margin.toFixed(1)}%</span></div>`;
   }
   let fcfRow = `<div class="row"><span class="row-label">フリーキャッシュフロー</span><span class="row-val no-data">―</span></div>`;
-  if (fcf != null) {
-    const em  = fcf >= 0 ? '🟢' : '🔴';
-    const col = fcf >= 0 ? '#30d158' : '#ff3b30';
+  if (d.fcf != null) {
+    const em  = d.fcf >= 0 ? '🟢' : '🔴';
+    const col = d.fcf >= 0 ? '#30d158' : '#ff3b30';
     fcfRow = `<div class="row"><span class="row-label">フリーキャッシュフロー</span>
-      <span class="row-val" style="color:${col}">${em} ${fmt(fcf)}</span></div>`;
+      <span class="row-val" style="color:${col}">${em} ${fmt(d.fcf)}</span></div>`;
   }
   html += `<div class="section">
     <div class="sec-title">🏥 経営の健全性</div>
@@ -300,30 +266,32 @@ function render(ticker, r) {
   </div>`;
 
   // 次回の案内
-  let nextRow = `<div class="row"><span class="row-label">次回決算予定日</span><span class="row-val">${nextDate || '―'}</span></div>`;
+  const estLabel = d.next_date_estimated ? ' <span style="font-size:10px;color:#a0aec0">(推定)</span>' : '';
+  const nextStr  = d.next_date ? d.next_date + estLabel : '―';
   let growthRow = '';
-  if (revGrowth != null) {
-    const pct  = (revGrowth * 100).toFixed(1);
-    const sign = revGrowth >= 0 ? '+' : '';
-    const cls  = revGrowth >= 0 ? 'beat' : 'miss';
-    const col  = revGrowth >= 0 ? '#30d158' : '#ff3b30';
+  if (d.rev_yoy_pct != null) {
+    const sign = d.rev_yoy_pct >= 0 ? '+' : '';
+    const col  = d.rev_yoy_pct >= 0 ? '#30d158' : '#ff3b30';
     growthRow = `<div class="row"><span class="row-label">売上成長率（前年比）</span>
-      <span class="row-val" style="color:${col}">${sign}${pct}%</span></div>`;
+      <span class="row-val" style="color:${col}">${sign}${d.rev_yoy_pct.toFixed(1)}%</span></div>`;
   }
   html += `<div class="section">
     <div class="sec-title">📅 次回の案内</div>
-    ${nextRow}${growthRow}
+    <div class="row"><span class="row-label">次回決算予定日</span><span class="row-val">${nextStr}</span></div>
+    ${growthRow}
   </div>`;
 
-  html += `<div class="footer-date">📅 情報取得日: ${new Date().toLocaleDateString('ja-JP')}</div>`;
+  html += `<div class="footer-date">📅 期末: ${d.quarter_date || '―'}</div>`;
 
   document.getElementById('card').innerHTML = html;
   document.getElementById('card').classList.add('on');
   document.getElementById('disc').classList.add('on');
 }
 
-function setLoading(on) {
-  document.getElementById('loading').classList.toggle('on', on);
+function setLoading(on, msg) {
+  const el = document.getElementById('loading');
+  el.classList.toggle('on', on);
+  if (msg) el.querySelector('span') ? (el.querySelector('span').textContent = msg) : null;
 }
 function setError(msg) {
   const el = document.getElementById('err');
@@ -340,12 +308,16 @@ async function doSearch() {
   document.getElementById('card').classList.remove('on');
   document.getElementById('disc').classList.remove('on');
 
+  // Render 無料プランはスリープ後の初回起動に最大50秒かかる
+  const warmup = setTimeout(() => setLoading(true, 'サーバー起動中... (最大1分かかる場合があります)'), 6000);
+
   try {
-    const data = await fetchYF(ticker);
+    const data = await fetchAPI(ticker);
     render(ticker, data);
   } catch (e) {
     setError(e.message);
   } finally {
+    clearTimeout(warmup);
     setLoading(false);
   }
 }
