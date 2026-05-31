@@ -281,7 +281,7 @@ function render(ticker, d) {
     ${growthRow}
   </div>`;
 
-  html += `<div class="footer-date">📅 期末: ${d.quarter_date || '―'}</div>`;
+  html += `<div class="footer-date">📅 期: ${d.quarter || '―'}</div>`;
 
   document.getElementById('card').innerHTML = html;
   document.getElementById('card').classList.add('on');

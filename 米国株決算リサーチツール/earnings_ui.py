@@ -633,9 +633,8 @@ def badge_html(pct):
 def build_html(d: dict) -> str:
     from datetime import date
 
-    qdate = d.get("quarter_date") or date.today().isoformat()
-    date_badge = f'<span>📅 期末: {qdate}</span>'
-    quarter_badge = f'<span>期: {d["quarter"]}</span>' if d["quarter"] else ""
+    date_badge = f'<span>📅 期: {d["quarter"]}</span>' if d["quarter"] else ""
+    quarter_badge = ""
 
     # 売上高（前年同期 → 実績 + YoY%）
     rev_ya_num = fmt_billion(d["rev_year_ago"]) if d["rev_year_ago"] is not None else '<span class="na">―</span>'
