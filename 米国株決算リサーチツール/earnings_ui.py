@@ -178,6 +178,7 @@ def fetch_data(ticker_symbol: str) -> dict:
         "op_margin_yoy": None,    # 営業利益率の前年同月比（%ポイント差）
         "fcf": None,
         "next_date": None,
+        "next_date_estimated": False,
         "next_rev_est": None,
         "next_eps_est": None,
         "quarter": None,
@@ -310,10 +311,24 @@ def fetch_data(ticker_symbol: str) -> dict:
                 nd = cal.get("Earnings Date") or cal.get("earningsDate")
                 if isinstance(nd, list) and nd:
                     nd = nd[0]
-                if nd:
-                    nd_str = str(nd)[:10]
+                if nd is not None:
+                    nd_str = nd.strftime("%Y-%m-%d") if hasattr(nd, "strftime") else str(nd)[:10]
                     if nd_str >= _today:
                         data["next_date"] = nd_str
+        except Exception:
+            pass
+
+    # quarterly_financials から推定（最終フォールバック）
+    if data["next_date"] is None and data.get("quarter_date"):
+        try:
+            from datetime import datetime, timedelta
+            last_qe = datetime.strptime(data["quarter_date"], "%Y-%m-%d")
+            # 次四半期末 ≈ +91日、発表 ≈ さらに+28日
+            estimated = last_qe + timedelta(days=119)
+            est_str = estimated.strftime("%Y-%m-%d")
+            if est_str >= _today:
+                data["next_date"] = est_str
+                data["next_date_estimated"] = True
         except Exception:
             pass
 
@@ -690,7 +705,11 @@ def build_html(d: dict) -> str:
     fcf_judge_html = make_judge_html(judge_fcf(fcf_val))
 
     # 次回
-    next_date_str = d["next_date"] or '<span class="na">データなし</span>'
+    if d["next_date"]:
+        est_label = ' <span style="font-size:10px;color:#a0aec0">(推定)</span>' if d.get("next_date_estimated") else ""
+        next_date_str = d["next_date"] + est_label
+    else:
+        next_date_str = '<span class="na">データなし</span>'
     next_rev_str = fmt_billion(d["next_rev_est"]) if d["next_rev_est"] else '<span class="na">データなし</span>'
     next_eps_str = f'${d["next_eps_est"]:.2f}' if d["next_eps_est"] is not None else '<span class="na">データなし</span>'
 
