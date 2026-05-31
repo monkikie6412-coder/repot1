@@ -147,8 +147,10 @@ def fetch_data(ticker_symbol: str) -> dict:
         "rev_year_ago": None,     # 前年同期の売上高（YoY比較用）
         "rev_yoy_pct": None,      # 売上高の前年同月比 %
         "eps_actual": None,
+        "eps_year_ago": None,
         "eps_estimate": None,
         "eps_surprise_pct": None,
+        "eps_yoy_pct": None,
         "op_margin": None,
         "op_margin_yoy": None,    # 営業利益率の前年同月比（%ポイント差）
         "fcf": None,
@@ -204,31 +206,42 @@ def fetch_data(ticker_symbol: str) -> dict:
         if v is not None:
             data["op_margin"] = v * 100
 
-    # ── EPS（earnings_dates から最新の報告済み行を取得） ───────────
+    # ── EPS（quarterly_financials 優先 → earnings_dates → info フォールバック） ───────────
     try:
-        ed = tk.earnings_dates
-        if ed is not None and not ed.empty:
-            # Reported EPSが入っている行だけ = 報告済み
-            reported = ed.dropna(subset=["Reported EPS"])
-            if not reported.empty:
-                latest = reported.iloc[0]
-                data["eps_actual"]   = safe_float(latest.get("Reported EPS"))
-                data["eps_estimate"] = safe_float(latest.get("EPS Estimate"))
+        _qf = tk.quarterly_financials
+        if _qf is not None and not _qf.empty:
+            for _eps_row in ["Diluted EPS", "Basic EPS"]:
+                if _eps_row in _qf.index:
+                    data["eps_actual"] = safe_float(_qf.loc[_eps_row].iloc[0])
+                    if len(_qf.columns) >= 5:
+                        data["eps_year_ago"] = safe_float(_qf.loc[_eps_row].iloc[4])
+                    break
     except Exception:
         pass
 
-    # EPS フォールバック
+    if data["eps_actual"] is None:
+        try:
+            ed = tk.earnings_dates
+            if ed is not None and not ed.empty:
+                reported = ed.dropna(subset=["Reported EPS"])
+                if not reported.empty:
+                    latest = reported.iloc[0]
+                    data["eps_actual"]   = safe_float(latest.get("Reported EPS"))
+                    data["eps_estimate"] = safe_float(latest.get("EPS Estimate"))
+        except Exception:
+            pass
+
     if data["eps_actual"] is None:
         data["eps_actual"] = safe_float(info.get("trailingEps"))
     if data["eps_estimate"] is None:
         data["eps_estimate"] = safe_float(info.get("forwardEps"))
 
-    if data["eps_actual"] is not None and data["eps_estimate"] is not None:
+    if data["eps_actual"] is not None and data["eps_year_ago"] is not None and data["eps_year_ago"] != 0:
+        data["eps_yoy_pct"] = (data["eps_actual"] - data["eps_year_ago"]) / abs(data["eps_year_ago"]) * 100
+    elif data["eps_actual"] is not None and data["eps_estimate"] is not None:
         base = abs(data["eps_estimate"])
         if base > 0:
-            data["eps_surprise_pct"] = (
-                (data["eps_actual"] - data["eps_estimate"]) / base * 100
-            )
+            data["eps_surprise_pct"] = (data["eps_actual"] - data["eps_estimate"]) / base * 100
 
     # ── FCF ────────────────────────────────────────────────────────
     try:
@@ -586,26 +599,30 @@ def build_html(d: dict) -> str:
     rev_bdg_html = badge_html(d["rev_yoy_pct"])
 
     # 総合コメントバナー
-    sc = surprise_comment(d["rev_yoy_pct"], d["eps_surprise_pct"])
+    sc = surprise_comment(d["rev_yoy_pct"], d.get("eps_yoy_pct") or d.get("eps_surprise_pct"))
     summary_banner_html = (
         f'<div class="summary-banner" style="background:{sc["bg"]};color:{sc["color"]}">'
         f'<span style="font-size:16px">{sc["emoji"]}</span>{sc["text"]}</div>'
     )
 
-    # EPS
-    if d["eps_estimate"] is not None:
+    # EPS（quarterly_financials の前年比 優先 / earnings_dates のサプライズ フォールバック）
+    if d.get("eps_year_ago") is not None:
+        eps_est_html = val_group(f'${d["eps_year_ago"]:.2f}', "前年同期")
+        eps_arr_html = '<span class="arrow">→</span>'
+        eps_bdg_html = badge_html(d.get("eps_yoy_pct"))
+    elif d.get("eps_estimate") is not None:
         eps_est_html = val_group(f'${d["eps_estimate"]:.2f}', "予想")
         eps_arr_html = '<span class="arrow">→</span>'
+        eps_bdg_html = badge_html(d.get("eps_surprise_pct"))
     else:
         eps_est_html = ""
         eps_arr_html = ""
+        eps_bdg_html = badge_html(None)
 
     if d["eps_actual"] is not None:
         eps_act_html = val_group(f'${d["eps_actual"]:.2f}', "実績")
     else:
         eps_act_html = val_group('<span class="na">―</span>', "実績")
-
-    eps_bdg_html = badge_html(d["eps_surprise_pct"])
 
     def make_judge_html(judge):
         if judge is None:
