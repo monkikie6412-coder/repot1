@@ -132,22 +132,67 @@ def judge_fcf(val):
 
 # ─── データ取得 ──────────────────────────────────────────────────
 
-def _fetch_next_earnings_fmp(ticker_symbol: str):
-    """FMP API から次回決算日を取得。環境変数 FMP_API_KEY が必要。"""
+# 主要銘柄の企業名辞書（info がブロックされた場合の確実なフォールバック）
+_KNOWN_COMPANIES: dict[str, str] = {
+    "AAPL": "Apple Inc.", "NVDA": "NVIDIA Corporation", "MSFT": "Microsoft Corporation",
+    "GOOGL": "Alphabet Inc.", "GOOG": "Alphabet Inc.", "AMZN": "Amazon.com, Inc.",
+    "META": "Meta Platforms, Inc.", "TSLA": "Tesla, Inc.", "AVGO": "Broadcom Inc.",
+    "BRK.B": "Berkshire Hathaway Inc.", "JPM": "JPMorgan Chase & Co.",
+    "V": "Visa Inc.", "UNH": "UnitedHealth Group Inc.", "XOM": "Exxon Mobil Corporation",
+    "WMT": "Walmart Inc.", "MA": "Mastercard Inc.", "JNJ": "Johnson & Johnson",
+    "PG": "Procter & Gamble Co.", "LLY": "Eli Lilly and Company",
+    "HD": "The Home Depot, Inc.", "CVX": "Chevron Corporation",
+    "ABBV": "AbbVie Inc.", "MRK": "Merck & Co., Inc.", "COST": "Costco Wholesale Corporation",
+    "NFLX": "Netflix, Inc.", "AMD": "Advanced Micro Devices, Inc.",
+    "CRM": "Salesforce, Inc.", "ADBE": "Adobe Inc.", "INTC": "Intel Corporation",
+    "PYPL": "PayPal Holdings, Inc.", "ORCL": "Oracle Corporation",
+    "QCOM": "QUALCOMM Incorporated", "TXN": "Texas Instruments Inc.",
+    "NOW": "ServiceNow, Inc.", "UBER": "Uber Technologies, Inc.",
+    "SHOP": "Shopify Inc.", "SPOT": "Spotify Technology S.A.",
+}
+
+
+def _fetch_company_name_yf_search(ticker_symbol: str) -> str | None:
+    """Yahoo Finance 検索エンドポイントから企業名を取得（APIキー不要）。"""
+    import urllib.request
+    import urllib.parse
+    import json
+    url = (
+        "https://query1.finance.yahoo.com/v1/finance/search"
+        f"?q={urllib.parse.quote(ticker_symbol)}&lang=en-US&region=US&quotesCount=1&newsCount=0"
+    )
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+        quotes = data.get("quotes", [])
+        if quotes:
+            return quotes[0].get("longname") or quotes[0].get("shortname") or None
+    except Exception:
+        pass
+    return None
+
+
+def _fetch_next_earnings_fmp(ticker_symbol: str) -> str | None:
+    """FMP historical/earning_calendar エンドポイントから次回決算日を取得。
+    ※ earning_calendar?symbol= は無効（全銘柄一括用）。銘柄指定には historical/ を使う。
+    """
     api_key = os.environ.get("FMP_API_KEY")
     if not api_key:
         return None
+    import urllib.request
+    import json
+    from datetime import date as _date
+    url = (
+        f"https://financialmodelingprep.com/api/v3/historical/earning_calendar/{ticker_symbol}"
+        f"?apikey={api_key}"
+    )
     try:
-        import urllib.request
-        import json
-        from datetime import date as _date
-        url = (
-            "https://financialmodelingprep.com/api/v3/earning_calendar"
-            f"?symbol={ticker_symbol}&apikey={api_key}"
-        )
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=6) as resp:
             results = json.loads(resp.read())
+        if not isinstance(results, list):
+            return None
         today = _date.today().isoformat()
         future = [r for r in results if r.get("date", "") >= today]
         return future[0]["date"] if future else None
@@ -165,7 +210,7 @@ def fetch_data(ticker_symbol: str) -> dict:
 
     data = {
         "ticker": ticker_symbol,
-        "company": info.get("longName") or info.get("shortName") or ticker_symbol,
+        "company": info.get("longName") or info.get("shortName") or None,
         "rev_actual": None,
         "rev_year_ago": None,     # 前年同期の売上高（YoY比較用）
         "rev_yoy_pct": None,      # 売上高の前年同月比 %
@@ -333,6 +378,7 @@ def fetch_data(ticker_symbol: str) -> dict:
             pass
 
     # ── 次回予想（revenue_estimate / earnings_estimate の 0q） ──────
+    # ※ Render 環境では Yahoo Finance にブロックされるため取れないことが多い
     try:
         re = tk.revenue_estimate
         if re is not None and not re.empty and "0q" in re.index:
@@ -347,9 +393,17 @@ def fetch_data(ticker_symbol: str) -> dict:
     except Exception:
         pass
 
-    # フォールバック
-    if data["next_eps_est"] is None:
-        data["next_eps_est"] = safe_float(info.get("forwardEps"))
+    # ── 会社名のフォールバック（優先度順） ────────────────────────
+    # 1. yf.info（ローカルでは取れる。Render では多くの場合ブロック済み）
+    # 2. Yahoo Finance 検索エンドポイント（異なる URL で Render でも取れる可能性）
+    # 3. 主要銘柄辞書（確実）
+    # 4. ティッカーそのまま
+    if data["company"] is None:
+        data["company"] = (
+            _fetch_company_name_yf_search(ticker_symbol)
+            or _KNOWN_COMPANIES.get(ticker_symbol.upper())
+            or ticker_symbol
+        )
 
     return data
 

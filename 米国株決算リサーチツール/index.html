@@ -8,6 +8,14 @@
   :root {
     --accent: #0071e3;
     --accent2: #5e5ce6;
+    --header-bg: linear-gradient(135deg, #0071e3 0%, #5e5ce6 100%);
+    --accent-bg: rgba(0,113,227,.07);
+    --accent-border: rgba(0,113,227,.14);
+    --accent-shadow: rgba(0,113,227,.20);
+    --phone-bg: #f2f7ff;
+    --health-bg: linear-gradient(145deg, #f5f2ff, #eef4ff);
+    --health-border: rgba(94,92,230,.12);
+    --section-color: #5e5ce6;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -78,14 +86,16 @@
   /* ── スマホカード ── */
   .phone {
     display: none; width: 390px; max-width: 100%;
-    background: #f2f7ff; border-radius: 44px;
-    box-shadow: 0 24px 80px rgba(0,113,227,.20), 0 4px 16px rgba(0,0,0,.05);
+    background: var(--phone-bg);
+    border-radius: 44px;
+    box-shadow: 0 24px 80px var(--accent-shadow), 0 4px 16px rgba(0,0,0,.05);
     overflow: hidden; padding-bottom: 32px;
   }
   .phone.on { display: block; }
 
+  /* ヘッダー */
   .ph-header {
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    background: var(--header-bg);
     padding: 22px 20px 18px;
     display: flex; align-items: center; gap: 12px;
   }
@@ -95,48 +105,89 @@
     border-radius: 14px; display: flex; align-items: center; justify-content: center;
     font-size: 24px;
   }
-  .ph-title { font-size: 17px; font-weight: 700; color: #fff; }
-  .ph-sub { font-size: 12px; color: rgba(255,255,255,.75); margin-top: 2px; }
-  .ph-price { margin-left: auto; text-align: right; }
-  .ph-price-val { font-size: 20px; font-weight: 800; color: #fff; }
-  .ph-price-chg { font-size: 12px; color: rgba(255,255,255,.85); }
+  .ph-title { font-size: 17px; font-weight: 800; color: #fff; letter-spacing: -.2px; }
+  .ph-sub { font-size: 12px; color: rgba(255,255,255,.72); margin-top: 2px; font-weight: 500; }
+  .ph-star { margin-left: auto; font-size: 22px; cursor: pointer; }
 
-  .section {
-    margin: 14px 16px 0;
+  /* メタバー */
+  .ph-meta {
+    background: var(--accent-bg);
+    padding: 10px 20px; display: flex; gap: 8px; flex-wrap: wrap;
+    font-size: 12px; color: var(--accent);
+    border-bottom: 1px solid var(--accent-border);
+  }
+  .ph-meta span {
+    background: rgba(255,255,255,.85);
+    border: 1px solid var(--accent-border);
+    padding: 4px 12px; border-radius: 20px; font-weight: 600;
+  }
+
+  /* セクション */
+  .section { margin: 16px 16px 0; }
+  .section-title {
+    font-size: 11px; font-weight: 800; color: var(--section-color);
+    letter-spacing: .9px; text-transform: uppercase;
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 7px;
+    padding-left: 10px;
+    border-left: 3px solid var(--accent);
+  }
+
+  /* カード共通 */
+  .card {
     background: #fff; border-radius: 20px;
-    padding: 14px 18px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.05);
+    padding: 16px 18px; margin-bottom: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.06), 0 1px 4px rgba(0,0,0,.04);
+    transition: transform .15s ease, box-shadow .15s ease;
   }
-  .sec-title {
-    font-size: 11px; font-weight: 700; color: var(--accent2);
-    text-transform: uppercase; letter-spacing: .6px; margin-bottom: 10px;
-  }
-  .row {
-    display: flex; justify-content: space-between; align-items: flex-start;
-    padding: 9px 0; border-bottom: 1px solid #f2f2f7;
-  }
-  .row:last-child { border-bottom: none; }
-  .row-label { font-size: 13px; color: #636366; font-weight: 500; }
-  .row-right { text-align: right; }
-  .row-val { font-size: 13px; font-weight: 700; color: #1c1c1e; }
-  .no-data { color: #aeaeb2; font-weight: 500; }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.09); }
 
-  .badge {
-    display: inline-flex; align-items: center; gap: 3px;
-    border-radius: 8px; padding: 2px 8px;
-    font-size: 11px; font-weight: 700; margin-top: 4px;
-  }
-  .badge.beat { background: rgba(48,209,88,.12); color: #1a7a36; }
-  .badge.miss { background: rgba(255,59,48,.10); color: #c0392b; }
-  .badge.neu  { background: #f2f2f7; color: #636366; }
-  .hint { font-size: 11px; color: #aeaeb2; margin-top: 3px; }
+  /* 決算サプライズ */
+  .surprise-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .surprise-label { font-size: 13px; color: #555; font-weight: 600; }
+  .surprise-values { display: flex; align-items: center; gap: 8px; }
+  .val-group { text-align: center; }
+  .val-group .num { font-size: 17px; font-weight: 800; color: #1c1c2e; }
+  .val-group .sub { font-size: 10px; color: #9ca3af; font-weight: 500; }
+  .arrow { font-size: 14px; color: #d1d5db; }
+  .badge { font-size: 12px; font-weight: 800; padding: 5px 11px; border-radius: 20px; letter-spacing: .2px; white-space: nowrap; }
+  .badge.pos { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #065f46; }
+  .badge.neg { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #991b1b; }
+  .badge.neu { background: #f3f4f6; color: #6b7280; }
+  .divider { border: none; border-top: 1.5px dashed #ebebf0; margin: 12px 0; }
 
-  .footer-date {
-    text-align: center; margin-top: 14px;
-    font-size: 11px; color: #aeaeb2;
+  /* 総合コメント */
+  .summary-banner {
+    margin-top: 14px; padding: 12px 14px; border-radius: 14px;
+    font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px; line-height: 1.4;
   }
 
-  /* ── 免責 ── */
+  /* 健全性カード */
+  .health-row { display: flex; gap: 10px; }
+  .health-card {
+    flex: 1; background: var(--health-bg);
+    border-radius: 16px; padding: 14px 10px; text-align: center;
+    border: 1px solid var(--health-border);
+  }
+  .icon-bubble {
+    width: 40px; height: 40px; background: rgba(255,255,255,.85);
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 20px; margin: 0 auto 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.07);
+  }
+  .health-card .value { font-size: 20px; font-weight: 900; margin-bottom: 2px; }
+  .health-card .label { font-size: 10px; color: #6b7280; font-weight: 600; }
+  .health-card .sub-label { font-size: 10px; color: #9ca3af; margin-top: 2px; }
+  .judge-badge { display: inline-block; margin-top: 8px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .judge-reason { font-size: 10px; color: #9ca3af; margin-top: 3px; line-height: 1.3; }
+
+  /* 次回の案内 */
+  .next-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; }
+  .next-row .key { font-size: 13px; color: #6b7280; display: flex; align-items: center; gap: 6px; font-weight: 500; }
+  .next-row .val { font-size: 14px; font-weight: 700; color: #1c1c2e; }
+  .na { color: #d1d5db; font-weight: 400; }
+
+  /* 免責 */
   .disclaimer {
     display: none; font-size: 11px; color: #aeaeb2;
     text-align: center; max-width: 390px;
@@ -166,7 +217,7 @@
   </div>
 </div>
 
-<div class="loading" id="loading"><div class="spinner"></div>データ取得中...</div>
+<div class="loading" id="loading"><div class="spinner"></div><span>データ取得中...</span></div>
 <div class="error-msg" id="err"></div>
 <div class="phone" id="card"></div>
 <p class="disclaimer" id="disc">
@@ -205,30 +256,59 @@ function fmt(v) {
   return `$${v.toFixed(2)}`;
 }
 
-function yoyRow(label, actual, yearAgo, yoyPct, isMoney = true) {
-  const valFmt = v => v == null ? null : isMoney ? fmt(v) : `$${v.toFixed(2)}`;
-  const valStr = valFmt(actual);
-  if (valStr == null) {
-    return `<div class="row"><span class="row-label">${label}</span><span class="row-val no-data">―</span></div>`;
+function judgeMargin(pct) {
+  if (pct == null) return null;
+  if (pct >= 25) return { text: '優秀', color: '#15803d', bg: '#dcfce7', reason: '売上の4分の1以上が利益に残る' };
+  if (pct >= 15) return { text: '良好', color: '#16a34a', bg: '#f0fdf4', reason: '売上から十分な利益を稼いでいる' };
+  if (pct >= 8)  return { text: '普通', color: '#92400e', bg: '#fef9c3', reason: '利益は出ているが改善の余地あり' };
+  return { text: '注意', color: '#b91c1c', bg: '#fee2e2', reason: '売上に対して利益が少ない状態' };
+}
+
+function judgeFcf(val) {
+  if (val == null) return null;
+  if (val >= 5e9) return { text: '優秀', color: '#15803d', bg: '#dcfce7', reason: '潤沢なキャッシュを創出' };
+  if (val >= 5e8) return { text: '良好', color: '#16a34a', bg: '#f0fdf4', reason: '安定したキャッシュ創出' };
+  if (val >= 0)   return { text: '普通', color: '#92400e', bg: '#fef9c3', reason: 'わずかなキャッシュ余剰' };
+  return { text: '注意', color: '#b91c1c', bg: '#fee2e2', reason: 'キャッシュが流出している' };
+}
+
+function surpriseComment(revYoyPct, epsYoyPct) {
+  let revScore = 0, epsScore = 0;
+  if (revYoyPct != null) {
+    if      (revYoyPct >= 20) revScore = 2;
+    else if (revYoyPct >=  5) revScore = 1;
+    else if (revYoyPct >= -5) revScore = 0;
+    else                      revScore = -1;
   }
-  let badge = '', hint = '';
-  if (yoyPct != null) {
-    const sign = yoyPct >= 0 ? '+' : '';
-    const cls  = yoyPct >= 0 ? 'beat' : 'miss';
-    badge = `<div class="badge ${cls}">${sign}${yoyPct.toFixed(1)}% 前年比</div>`;
+  if (epsYoyPct != null) {
+    if      (epsYoyPct >=  5) epsScore = 2;
+    else if (epsYoyPct >=  2) epsScore = 1;
+    else if (epsYoyPct >= -2) epsScore = 0;
+    else                      epsScore = -1;
   }
-  if (yearAgo != null) {
-    hint = `<div class="hint">前年同期: ${valFmt(yearAgo)}</div>`;
-  }
-  return `<div class="row">
-    <span class="row-label">${label}</span>
-    <div class="row-right"><div class="row-val">${valStr}</div>${badge}${hint}</div>
-  </div>`;
+  const t = revScore + epsScore;
+  if (t >= 4)  return { emoji: '🚀', text: '売上・EPS ともに大幅上振れ。非常に好調な決算！', color: '#14532d', bg: '#dcfce7' };
+  if (t >= 2)  return { emoji: '✅', text: '売上・EPS ともに堅調。市場の期待を超えました',   color: '#15803d', bg: '#f0fdf4' };
+  if (t === 1) return { emoji: '🟢', text: '概ね好調。一部の指標が予想を上回りました',         color: '#166534', bg: '#f0fdf4' };
+  if (t === 0) return { emoji: '🟡', text: '予想通りの着地。大きなサプライズはなし',           color: '#92400e', bg: '#fef9c3' };
+  if (t >= -1) return { emoji: '⚠️', text: '一部の指標が予想を下回りました。要注視',          color: '#9a3412', bg: '#fff7ed' };
+  return             { emoji: '🔴', text: '売上・EPS ともに予想を下回る軟調な決算',           color: '#b91c1c', bg: '#fee2e2' };
+}
+
+function judgeHtml(j) {
+  if (!j) return '';
+  return `<div><span class="judge-badge" style="background:${j.bg};color:${j.color}">${j.text}</span></div>`
+       + `<div class="judge-reason">${j.reason}</div>`;
+}
+
+function vg(num, sub) {
+  return `<div class="val-group"><div class="num">${num}</div><div class="sub">${sub}</div></div>`;
 }
 
 function render(ticker, d) {
   const qLabel = d.quarter || '';
 
+  // ── ヘッダー ──
   let html = `
   <div class="ph-header">
     <div class="ph-icon">📊</div>
@@ -236,52 +316,124 @@ function render(ticker, d) {
       <div class="ph-title">${d.company || ticker}</div>
       <div class="ph-sub">${ticker}${qLabel ? ' · ' + qLabel + ' 決算' : ''}</div>
     </div>
+    <div class="ph-star">★</div>
   </div>`;
 
-  // 決算サプライズ
-  html += `<div class="section">
-    <div class="sec-title">⚡ 決算サプライズ</div>
-    ${yoyRow('売上高', d.rev_actual, d.rev_year_ago, d.rev_yoy_pct, true)}
-    ${yoyRow('1株あたり利益（EPS）', d.eps_actual, d.eps_year_ago, d.eps_yoy_pct, false)}
-  </div>`;
-
-  // 経営の健全性
-  let opRow = `<div class="row"><span class="row-label">営業利益率</span><span class="row-val no-data">―</span></div>`;
-  if (d.op_margin != null) {
-    const em  = d.op_margin >= 20 ? '🟢' : d.op_margin >= 10 ? '🟡' : '🔴';
-    const col = d.op_margin >= 20 ? '#30d158' : d.op_margin >= 10 ? '#ff9f0a' : '#ff3b30';
-    opRow = `<div class="row"><span class="row-label">営業利益率</span>
-      <span class="row-val" style="color:${col}">${em} ${d.op_margin.toFixed(1)}%</span></div>`;
+  if (qLabel) {
+    html += `<div class="ph-meta"><span>📅 期: ${qLabel}</span></div>`;
   }
-  let fcfRow = `<div class="row"><span class="row-label">フリーキャッシュフロー</span><span class="row-val no-data">―</span></div>`;
-  if (d.fcf != null) {
-    const em  = d.fcf >= 0 ? '🟢' : '🔴';
-    const col = d.fcf >= 0 ? '#30d158' : '#ff3b30';
-    fcfRow = `<div class="row"><span class="row-label">フリーキャッシュフロー</span>
-      <span class="row-val" style="color:${col}">${em} ${fmt(d.fcf)}</span></div>`;
+
+  // ── 決算サプライズ ──
+  const revActStr = d.rev_actual != null ? fmt(d.rev_actual) : null;
+  const revYaStr  = d.rev_year_ago != null ? fmt(d.rev_year_ago) : null;
+  const epsActStr = d.eps_actual != null ? `$${d.eps_actual.toFixed(2)}` : null;
+
+  // 売上高行
+  let revHtml;
+  if (revYaStr && revActStr) {
+    const p = d.rev_yoy_pct;
+    const cls = p != null ? (p >= 0 ? 'pos' : 'neg') : 'neu';
+    const sign = p != null ? (p >= 0 ? '+' : '') : '';
+    const badge = p != null ? `<span class="badge ${cls}">${sign}${p.toFixed(1)}%</span>` : '<span class="badge neu">―</span>';
+    revHtml = `${vg(revYaStr,'前年同期')}<span class="arrow">→</span>${vg(revActStr,'実績')}${badge}`;
+  } else {
+    revHtml = `${vg(revActStr || '<span class="na">―</span>','実績')}<span class="badge neu">―</span>`;
   }
+
+  // EPS行
+  let epsHtml;
+  const epsRef   = d.eps_year_ago != null ? d.eps_year_ago : d.eps_estimate;
+  const epsLabel = d.eps_year_ago != null ? '前年同期' : '予想';
+  const epsPct   = d.eps_year_ago != null ? d.eps_yoy_pct : d.eps_surprise_pct;
+  if (epsRef != null && epsActStr) {
+    const cls = epsPct != null ? (epsPct >= 0 ? 'pos' : 'neg') : 'neu';
+    const sign = epsPct != null ? (epsPct >= 0 ? '+' : '') : '';
+    const badge = epsPct != null ? `<span class="badge ${cls}">${sign}${epsPct.toFixed(1)}%</span>` : '<span class="badge neu">―</span>';
+    epsHtml = `${vg(`$${epsRef.toFixed(2)}`,epsLabel)}<span class="arrow">→</span>${vg(epsActStr,'実績')}${badge}`;
+  } else {
+    epsHtml = `${vg(epsActStr || '<span class="na">―</span>','実績')}<span class="badge neu">―</span>`;
+  }
+
+  // 総合コメント
+  const sc = surpriseComment(d.rev_yoy_pct, d.eps_yoy_pct != null ? d.eps_yoy_pct : d.eps_surprise_pct);
+  const banner = `<div class="summary-banner" style="background:${sc.bg};color:${sc.color}"><span style="font-size:16px">${sc.emoji}</span>${sc.text}</div>`;
+
   html += `<div class="section">
-    <div class="sec-title">🏥 経営の健全性</div>
-    ${opRow}${fcfRow}
+    <div class="section-title">⚡ 決算サプライズ</div>
+    <div class="card">
+      <div class="surprise-row">
+        <div class="surprise-label">📈 売上高</div>
+        <div class="surprise-values">${revHtml}</div>
+      </div>
+      <hr class="divider">
+      <div class="surprise-row">
+        <div class="surprise-label">💰 EPS</div>
+        <div class="surprise-values">${epsHtml}</div>
+      </div>
+      ${banner}
+    </div>
   </div>`;
 
-  // 次回の案内
-  const estLabel = d.next_date_estimated ? ' <span style="font-size:10px;color:#a0aec0">(推定)</span>' : '';
-  const nextStr  = d.next_date ? d.next_date + estLabel : '―';
-  let growthRow = '';
-  if (d.rev_yoy_pct != null) {
-    const sign = d.rev_yoy_pct >= 0 ? '+' : '';
-    const col  = d.rev_yoy_pct >= 0 ? '#30d158' : '#ff3b30';
-    growthRow = `<div class="row"><span class="row-label">売上成長率（前年比）</span>
-      <span class="row-val" style="color:${col}">${sign}${d.rev_yoy_pct.toFixed(1)}%</span></div>`;
+  // ── 経営の健全性 ──
+  const om = d.op_margin;
+  const omColor = om != null ? (om >= 20 ? '#22c55e' : om >= 10 ? '#f59e0b' : '#ef4444') : '#888';
+  const omStr   = om != null ? `${om.toFixed(1)}%` : '―';
+  const omYoy   = d.op_margin_yoy;
+  let omYoyHtml = '前年同月比';
+  if (omYoy != null) {
+    const sign = omYoy >= 0 ? '▲' : '▼';
+    const col  = omYoy >= 0 ? '#22c55e' : '#ef4444';
+    omYoyHtml  = `前年同月比 <span style="color:${col};font-weight:700">${sign}${Math.abs(omYoy).toFixed(1)}pt</span>`;
   }
+
+  const fcfVal   = d.fcf;
+  const fcfColor = fcfVal != null ? (fcfVal >= 0 ? '#22c55e' : '#ef4444') : '#888';
+  const fcfStr   = fcfVal != null ? fmt(fcfVal) : '―';
+
   html += `<div class="section">
-    <div class="sec-title">📅 次回の案内</div>
-    <div class="row"><span class="row-label">次回決算予定日</span><span class="row-val">${nextStr}</span></div>
-    ${growthRow}
+    <div class="section-title">🏥 経営の健全性</div>
+    <div class="card">
+      <div class="health-row">
+        <div class="health-card">
+          <div class="icon-bubble">📊</div>
+          <div class="value" style="color:${omColor}">${omStr}</div>
+          <div class="label">営業利益率</div>
+          <div class="sub-label">${omYoyHtml}</div>
+          ${judgeHtml(judgeMargin(om))}
+        </div>
+        <div class="health-card">
+          <div class="icon-bubble">💵</div>
+          <div class="value" style="color:${fcfColor}">${fcfStr}</div>
+          <div class="label">フリーキャッシュフロー</div>
+          <div class="sub-label">（現金を生む力）</div>
+          ${judgeHtml(judgeFcf(fcfVal))}
+        </div>
+      </div>
+    </div>
   </div>`;
 
-  html += `<div class="footer-date">📅 期: ${d.quarter || '―'}</div>`;
+  // ── 次回の案内 ──
+  const estLabel    = d.next_date_estimated ? ' <span style="font-size:10px;color:#a0aec0">(目安)</span>' : '';
+  const nextDateStr = d.next_date != null ? d.next_date + estLabel : '<span class="na">不明</span>';
+
+  // 次回売上/EPS予想は有料APIが必要なため、データがある場合のみ表示
+  const revRow = d.next_rev_est != null
+    ? `<hr class="divider"><div class="next-row"><span class="key">📈 次回売上予想</span><span class="val">${fmt(d.next_rev_est)}</span></div>`
+    : '';
+  const epsRow = d.next_eps_est != null
+    ? `<hr class="divider"><div class="next-row"><span class="key">💰 次回EPS予想</span><span class="val">$${d.next_eps_est.toFixed(2)}</span></div>`
+    : '';
+
+  html += `<div class="section">
+    <div class="section-title">📅 次回の案内</div>
+    <div class="card">
+      <div class="next-row">
+        <span class="key">🗓️ 次回決算予定日</span>
+        <span class="val">${nextDateStr}</span>
+      </div>
+      ${revRow}${epsRow}
+    </div>
+  </div>`;
 
   document.getElementById('card').innerHTML = html;
   document.getElementById('card').classList.add('on');
@@ -291,7 +443,8 @@ function render(ticker, d) {
 function setLoading(on, msg) {
   const el = document.getElementById('loading');
   el.classList.toggle('on', on);
-  if (msg) el.querySelector('span') ? (el.querySelector('span').textContent = msg) : null;
+  const span = el.querySelector('span');
+  if (span && msg) span.textContent = msg;
 }
 function setError(msg) {
   const el = document.getElementById('err');
@@ -303,7 +456,7 @@ async function doSearch() {
   const ticker = document.getElementById('inp').value.trim().toUpperCase();
   if (!ticker) return;
 
-  setLoading(true);
+  setLoading(true, 'データ取得中...');
   setError('');
   document.getElementById('card').classList.remove('on');
   document.getElementById('disc').classList.remove('on');
