@@ -132,6 +132,29 @@ def judge_fcf(val):
 
 # ─── データ取得 ──────────────────────────────────────────────────
 
+def _fetch_next_earnings_fmp(ticker_symbol: str):
+    """FMP API から次回決算日を取得。環境変数 FMP_API_KEY が必要。"""
+    api_key = os.environ.get("FMP_API_KEY")
+    if not api_key:
+        return None
+    try:
+        import urllib.request
+        import json
+        from datetime import date as _date
+        url = (
+            "https://financialmodelingprep.com/api/v3/earning_calendar"
+            f"?symbol={ticker_symbol}&apikey={api_key}"
+        )
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            results = json.loads(resp.read())
+        today = _date.today().isoformat()
+        future = [r for r in results if r.get("date", "") >= today]
+        return future[0]["date"] if future else None
+    except Exception:
+        return None
+
+
 def fetch_data(ticker_symbol: str) -> dict:
     tk = yf.Ticker(ticker_symbol)
     info = {}
@@ -144,21 +167,22 @@ def fetch_data(ticker_symbol: str) -> dict:
         "ticker": ticker_symbol,
         "company": info.get("longName") or info.get("shortName") or ticker_symbol,
         "rev_actual": None,
-        "rev_year_ago": None,
-        "rev_yoy_pct": None,
+        "rev_year_ago": None,     # 前年同期の売上高（YoY比較用）
+        "rev_yoy_pct": None,      # 売上高の前年同月比 %
         "eps_actual": None,
-        "eps_year_ago": None,     # 前年同期EPS（比較用）
-        "eps_yoy_pct": None,      # EPS前年同期比 %
-        "eps_estimate": None,     # アナリスト予想EPS（FMP取得時のみ）
+        "eps_year_ago": None,
+        "eps_estimate": None,
         "eps_surprise_pct": None,
+        "eps_yoy_pct": None,
         "op_margin": None,
-        "op_margin_yoy": None,
+        "op_margin_yoy": None,    # 営業利益率の前年同月比（%ポイント差）
         "fcf": None,
         "next_date": None,
+        "next_date_estimated": False,
         "next_rev_est": None,
         "next_eps_est": None,
         "quarter": None,
-        "report_date": None,      # 決算発表日
+        "quarter_date": None,
     }
 
     # ── 四半期財務データ（実績 + 前年同月比） ──────────────────────
@@ -192,11 +216,11 @@ def fetch_data(ticker_symbol: str) -> dict:
                     (data["rev_actual"] - data["rev_year_ago"]) / abs(data["rev_year_ago"]) * 100
                 )
 
-            # 四半期ラベル・決算発表日
+            # 四半期ラベル・期末日
             try:
                 col = qf.columns[0]
                 data["quarter"] = col.strftime("%Y-Q") + str((col.month - 1) // 3 + 1)
-                data["report_date"] = col.strftime("%Y-%m-%d")
+                data["quarter_date"] = col.strftime("%Y-%m-%d")
             except Exception:
                 pass
     except Exception:
@@ -208,20 +232,19 @@ def fetch_data(ticker_symbol: str) -> dict:
         if v is not None:
             data["op_margin"] = v * 100
 
-    # ── EPS（quarterly_financials から取得 → クラウドでもブロックされない） ──
+    # ── EPS（quarterly_financials 優先 → earnings_dates → info フォールバック） ───────────
     try:
-        if qf is not None and not qf.empty:
-            for eps_key in ("Diluted EPS", "Basic EPS"):
-                if eps_key in qf.index:
-                    data["eps_actual"] = safe_float(qf.loc[eps_key].iloc[0])
-                    # 前年同期EPS（4四半期前 = 同じ季節）
-                    if len(qf.columns) >= 5:
-                        data["eps_year_ago"] = safe_float(qf.loc[eps_key].iloc[4])
+        _qf = tk.quarterly_financials
+        if _qf is not None and not _qf.empty:
+            for _eps_row in ["Diluted EPS", "Basic EPS"]:
+                if _eps_row in _qf.index:
+                    data["eps_actual"] = safe_float(_qf.loc[_eps_row].iloc[0])
+                    if len(_qf.columns) >= 5:
+                        data["eps_year_ago"] = safe_float(_qf.loc[_eps_row].iloc[4])
                     break
     except Exception:
         pass
 
-    # フォールバック: earnings_dates（クラウドでは通常ブロックされるが念のため）
     if data["eps_actual"] is None:
         try:
             ed = tk.earnings_dates
@@ -234,12 +257,14 @@ def fetch_data(ticker_symbol: str) -> dict:
         except Exception:
             pass
 
-    # EPS 前年同期比 %
+    if data["eps_actual"] is None:
+        data["eps_actual"] = safe_float(info.get("trailingEps"))
+    if data["eps_estimate"] is None:
+        data["eps_estimate"] = safe_float(info.get("forwardEps"))
+
     if data["eps_actual"] is not None and data["eps_year_ago"] is not None and data["eps_year_ago"] != 0:
         data["eps_yoy_pct"] = (data["eps_actual"] - data["eps_year_ago"]) / abs(data["eps_year_ago"]) * 100
-
-    # アナリスト予想 vs 実績のサプライズ（FMP取得時のみ eps_estimate が入る）
-    if data["eps_actual"] is not None and data["eps_estimate"] is not None:
+    elif data["eps_actual"] is not None and data["eps_estimate"] is not None:
         base = abs(data["eps_estimate"])
         if base > 0:
             data["eps_surprise_pct"] = (data["eps_actual"] - data["eps_estimate"]) / base * 100
@@ -259,28 +284,26 @@ def fetch_data(ticker_symbol: str) -> dict:
     if data["fcf"] is None:
         data["fcf"] = safe_float(info.get("freeCashflow"))
 
-    # ── 次回決算日・予想（FMP API） ────────────────────────────────
-    import os, requests as _req
-    from datetime import date as _date, timedelta as _td
-    fmp_key = os.environ.get("FMP_API_KEY", "")
-    if fmp_key:
-        try:
-            today = _date.today().isoformat()
-            future = (_date.today() + _td(days=180)).isoformat()
-            url = (f"https://financialmodelingprep.com/api/v3/earning_calendar"
-                   f"?from={today}&to={future}&symbol={ticker_symbol}&apikey={fmp_key}")
-            resp = _req.get(url, timeout=5)
-            if resp.status_code == 200:
-                items = resp.json()
-                if items:
-                    item = items[0]
-                    data["next_date"]    = item.get("date")
-                    data["next_eps_est"] = safe_float(item.get("epsEstimated"))
-                    data["next_rev_est"] = safe_float(item.get("revenueEstimated"))
-        except Exception:
-            pass
+    # ── 次回決算日 ─────────────────────────────────────────────────
+    from datetime import date as _date
+    _today = _date.today().isoformat()
 
-    # FMPキーなし or 失敗時: yfinance calendar フォールバック
+    try:
+        ed = tk.earnings_dates
+        if ed is not None and not ed.empty:
+            future = ed[ed["Reported EPS"].isna()]
+            if not future.empty:
+                nd = str(future.index[0])[:10]
+                if nd >= _today:
+                    data["next_date"] = nd
+    except Exception:
+        pass
+
+    # FMP API（FMP_API_KEY 環境変数が設定されている場合）
+    if data["next_date"] is None:
+        data["next_date"] = _fetch_next_earnings_fmp(ticker_symbol)
+
+    # yfinance calendar フォールバック（過去日は無視）
     if data["next_date"] is None:
         try:
             cal = tk.calendar
@@ -288,9 +311,41 @@ def fetch_data(ticker_symbol: str) -> dict:
                 nd = cal.get("Earnings Date") or cal.get("earningsDate")
                 if isinstance(nd, list) and nd:
                     nd = nd[0]
-                data["next_date"] = str(nd)[:10] if nd else None
+                if nd is not None:
+                    nd_str = nd.strftime("%Y-%m-%d") if hasattr(nd, "strftime") else str(nd)[:10]
+                    if nd_str >= _today:
+                        data["next_date"] = nd_str
         except Exception:
             pass
+
+    # quarterly_financials から推定（最終フォールバック）
+    if data["next_date"] is None and data.get("quarter_date"):
+        try:
+            from datetime import datetime, timedelta
+            last_qe = datetime.strptime(data["quarter_date"], "%Y-%m-%d")
+            # 次四半期末 ≈ +91日、発表 ≈ さらに+28日
+            estimated = last_qe + timedelta(days=119)
+            est_str = estimated.strftime("%Y-%m-%d")
+            if est_str >= _today:
+                data["next_date"] = est_str
+                data["next_date_estimated"] = True
+        except Exception:
+            pass
+
+    # ── 次回予想（revenue_estimate / earnings_estimate の 0q） ──────
+    try:
+        re = tk.revenue_estimate
+        if re is not None and not re.empty and "0q" in re.index:
+            data["next_rev_est"] = safe_float(re.loc["0q", "avg"])
+    except Exception:
+        pass
+
+    try:
+        ee = tk.earnings_estimate
+        if ee is not None and not ee.empty and "0q" in ee.index:
+            data["next_eps_est"] = safe_float(ee.loc["0q", "avg"])
+    except Exception:
+        pass
 
     # フォールバック
     if data["next_eps_est"] is None:
@@ -576,10 +631,10 @@ def badge_html(pct):
 
 
 def build_html(d: dict) -> str:
-    # 発表日: report_date があればそれを使い、なければ今日の日付
-    report_dt = d.get("report_date") or __import__("datetime").date.today().isoformat()
-    date_badge = f'<span>📅 決算期末: {report_dt}</span>'
-    quarter_badge = f'<span>期: {d["quarter"]}</span>' if d["quarter"] else ""
+    from datetime import date
+
+    date_badge = f'<span>📅 期: {d["quarter"]}</span>' if d["quarter"] else ""
+    quarter_badge = ""
 
     # 売上高（前年同期 → 実績 + YoY%）
     rev_ya_num = fmt_billion(d["rev_year_ago"]) if d["rev_year_ago"] is not None else '<span class="na">―</span>'
@@ -593,23 +648,22 @@ def build_html(d: dict) -> str:
 
     rev_bdg_html = badge_html(d["rev_yoy_pct"])
 
-    # 総合コメントバナー（EPS YoY を使用、アナリスト予想がある場合はサプライズを優先）
-    eps_pct_for_comment = d.get("eps_surprise_pct") if d.get("eps_surprise_pct") is not None else d.get("eps_yoy_pct")
-    sc = surprise_comment(d["rev_yoy_pct"], eps_pct_for_comment)
+    # 総合コメントバナー
+    sc = surprise_comment(d["rev_yoy_pct"], d.get("eps_yoy_pct") or d.get("eps_surprise_pct"))
     summary_banner_html = (
         f'<div class="summary-banner" style="background:{sc["bg"]};color:{sc["color"]}">'
         f'<span style="font-size:16px">{sc["emoji"]}</span>{sc["text"]}</div>'
     )
 
-    # EPS表示：アナリスト予想があれば「予想→実績」、なければ「前年同期→実績」で表示
-    if d["eps_estimate"] is not None:
-        eps_est_html = val_group(f'${d["eps_estimate"]:.2f}', "予想")
-        eps_arr_html = '<span class="arrow">→</span>'
-        eps_bdg_html = badge_html(d["eps_surprise_pct"])
-    elif d.get("eps_year_ago") is not None:
+    # EPS（quarterly_financials の前年比 優先 / earnings_dates のサプライズ フォールバック）
+    if d.get("eps_year_ago") is not None:
         eps_est_html = val_group(f'${d["eps_year_ago"]:.2f}', "前年同期")
         eps_arr_html = '<span class="arrow">→</span>'
         eps_bdg_html = badge_html(d.get("eps_yoy_pct"))
+    elif d.get("eps_estimate") is not None:
+        eps_est_html = val_group(f'${d["eps_estimate"]:.2f}', "予想")
+        eps_arr_html = '<span class="arrow">→</span>'
+        eps_bdg_html = badge_html(d.get("eps_surprise_pct"))
     else:
         eps_est_html = ""
         eps_arr_html = ""
@@ -650,7 +704,11 @@ def build_html(d: dict) -> str:
     fcf_judge_html = make_judge_html(judge_fcf(fcf_val))
 
     # 次回
-    next_date_str = d["next_date"] or '<span class="na">データなし</span>'
+    if d["next_date"]:
+        est_label = ' <span style="font-size:10px;color:#a0aec0">(推定)</span>' if d.get("next_date_estimated") else ""
+        next_date_str = d["next_date"] + est_label
+    else:
+        next_date_str = '<span class="na">データなし</span>'
     next_rev_str = fmt_billion(d["next_rev_est"]) if d["next_rev_est"] else '<span class="na">データなし</span>'
     next_eps_str = f'${d["next_eps_est"]:.2f}' if d["next_eps_est"] is not None else '<span class="na">データなし</span>'
 
