@@ -4,8 +4,6 @@
 ブラウザで http://localhost:5000 を開く
 """
 
-import json
-import yfinance as yf
 from flask import Flask, request, render_template_string
 from earnings_ui import fetch_data, build_html
 
@@ -215,6 +213,25 @@ RESULT_WRAPPER = """<!DOCTYPE html>
 """
 
 
+@app.route("/api/result")
+def api_result():
+    from flask import jsonify
+    ticker = request.args.get("ticker", "").strip().upper()
+    if not ticker:
+        resp = jsonify({"error": "ticker required"})
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        return resp, 400
+    try:
+        data = fetch_data(ticker)
+        resp = jsonify(data)
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        return resp
+    except Exception as e:
+        resp = jsonify({"error": str(e)})
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        return resp, 500
+
+
 @app.route("/")
 def index():
     return render_template_string(TOP_HTML, query="", error=None)
@@ -247,28 +264,6 @@ def result():
             TOP_HTML, query=ticker,
             error=f"データ取得中にエラーが発生しました: {e}"
         )
-
-
-@app.route("/debug")
-def debug():
-    ticker = request.args.get("ticker", "NVDA").strip().upper()
-    tk = yf.Ticker(ticker)
-    out = {}
-    try:
-        qf = tk.quarterly_financials
-        out["qf_index"] = list(qf.index) if qf is not None else None
-        out["qf_columns"] = [str(c) for c in qf.columns] if qf is not None else None
-        for key in ("Diluted EPS", "Basic EPS", "Total Revenue", "Net Income"):
-            if qf is not None and key in qf.index:
-                out[key] = [str(v) for v in qf.loc[key].tolist()]
-    except Exception as e:
-        out["qf_error"] = str(e)
-    try:
-        cal = tk.calendar
-        out["calendar"] = str(cal)
-    except Exception as e:
-        out["calendar_error"] = str(e)
-    return f"<pre>{json.dumps(out, indent=2, default=str)}</pre>"
 
 
 if __name__ == "__main__":
